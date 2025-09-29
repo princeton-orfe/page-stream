@@ -1,0 +1,325 @@
+#!/usr/bin/env node
+/// <reference types="node" />
+// Node and CLI imports
+import { Command } from 'commander';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
+import fs from 'node:fs';
+import { chromium, Browser, Page } from 'playwright';
+
+interface StreamOptions {
+  url: string;
+  ingest: string; // e.g. srt://host:port?streamid=... or rtmp://...
+  width: number;
+  height: number;
+  fps: number;
+  preset: string;
+  videoBitrate: string;
+  audioBitrate: string;
+  format: string; // container format, e.g. mpegts, flv
+  extraFfmpeg: string[];
+  headless: boolean;
+  reconnectAttempts: number; // 0 = infinite
+  reconnectInitialDelayMs: number;
+  reconnectMaxDelayMs: number;
+  healthIntervalSeconds: number; // 0 = disabled
+}
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const DEMO_PAGE = path.join(__dirname, '..', 'demo', 'index.html');
+
+class PageStreamer {
+  private browser?: Browser;
+  private page?: Page;
+  private ff?: ChildProcessWithoutNullStreams;
+  private refreshing = false;
+  private stopping = false;
+  private restartAttempt = 0;
+  private restartTimer?: NodeJS.Timeout;
+  private healthTimer?: NodeJS.Timeout;
+  private startTime = Date.now();
+  private lastFfmpegExitCode: number | null = null;
+
+  constructor(private opts: StreamOptions) {}
+
+  async start() {
+    if (!fs.existsSync(this.opts.url) && !/^https?:/i.test(this.opts.url)) {
+      console.warn(`Provided URL not found locally, falling back to demo page: ${this.opts.url}`);
+      this.opts.url = DEMO_PAGE;
+    }
+    await this.launchBrowser();
+    await this.launchFfmpeg();
+    this.startHealthLoop();
+  }
+
+  async launchBrowser() {
+    this.browser = await chromium.launch({
+      headless: this.opts.headless,
+      args: [
+        '--disable-dev-shm-usage',
+        '--no-sandbox',
+        `--window-size=${this.opts.width},${this.opts.height}`
+      ]
+    });
+    const ctx = await this.browser.newContext({
+      viewport: { width: this.opts.width, height: this.opts.height }
+    });
+    this.page = await ctx.newPage();
+    await this.page.goto(this.toFileUrlIfNeeded(this.opts.url));
+  }
+
+  toFileUrlIfNeeded(u: string) {
+    if (/^https?:/i.test(u)) return u;
+    return 'file://' + path.resolve(u);
+  }
+
+  buildFfmpegArgs(): string[] {
+    // Build ffmpeg command with correct ordering: all inputs first, then encoding/output options.
+    const { width, height, fps, ingest, preset, videoBitrate, audioBitrate, format, extraFfmpeg } = this.opts;
+    const display = process.env.DISPLAY || ':99';
+    const args: string[] = [
+      // Video input (X11)
+      '-f','x11grab',
+      '-framerate', String(fps),
+      '-video_size', `${width}x${height}`,
+      '-i', display,
+    ];
+    if (audioBitrate) {
+      // Silent audio source input before specifying output codecs
+      args.push('-f','lavfi','-i','anullsrc=channel_layout=stereo:sample_rate=44100');
+    }
+    // Encoding options (apply to outputs, must come after all -i inputs)
+    args.push(
+      '-c:v','libx264',
+      '-preset', preset,
+      '-tune','zerolatency',
+      '-pix_fmt','yuv420p',
+      '-b:v', videoBitrate,
+      '-maxrate', videoBitrate,
+      '-bufsize', (parseInt(videoBitrate) * 2) + 'k',
+      '-g', String(fps * 2)
+    );
+    if (audioBitrate) {
+      args.push('-c:a','aac','-b:a', audioBitrate);
+    }
+    // Extra user-supplied args before container/output format
+    args.push(...extraFfmpeg);
+    args.push('-f', format, ingest);
+    return args;
+  }
+
+  async launchFfmpeg() {
+    const args = this.buildFfmpegArgs();
+    const child = spawn('ffmpeg', args, { stdio: ['ignore','inherit','inherit'] });
+    this.ff = child as unknown as ChildProcessWithoutNullStreams; // relaxed cast
+    child.on('exit', (code: number | null, signal: NodeJS.Signals | null) => {
+      console.log(`ffmpeg exited code=${code} signal=${signal}`);
+      this.lastFfmpegExitCode = code;
+      this.scheduleRestartIfNeeded(code);
+    });
+  }
+
+  async refreshPage() {
+    if (this.refreshing) return;
+    this.refreshing = true;
+    try {
+      if (!this.page) return;
+      console.log('Refreshing streamed page...');
+  await this.page.reload({ waitUntil: 'networkidle' });
+      console.log('Refresh complete.');
+    } finally {
+      this.refreshing = false;
+    }
+  }
+
+  async stop() {
+    this.stopping = true;
+    if (this.restartTimer) clearTimeout(this.restartTimer);
+    if (this.healthTimer) clearTimeout(this.healthTimer);
+    await this.page?.close();
+    await this.browser?.close();
+    if (this.ff && !this.ff.killed) this.ff.kill('SIGINT');
+  }
+
+  private scheduleRestartIfNeeded(code: number | null) {
+    const { ingest, reconnectAttempts, reconnectInitialDelayMs, reconnectMaxDelayMs } = this.opts;
+    if (this.stopping) return;
+    if (code === 0) return; // clean exit
+    const retryProtocol = this.isRetryProtocol(ingest);
+    if (!retryProtocol) {
+      console.error(`ffmpeg exited (code=${code}). Ingest protocol not configured for auto-retry. Exiting with code 11.`);
+      // Give the event loop a tick so logs flush
+      setTimeout(() => process.exit(11), 10);
+      return;
+    }
+    // Retry path
+    if (reconnectAttempts !== 0 && this.restartAttempt >= reconnectAttempts) {
+      console.error(`${this.protocolName(ingest)} reconnect attempts exhausted (${this.restartAttempt}/${reconnectAttempts}). Giving up.`);
+      this.printFailureHelp(ingest);
+      setTimeout(()=> process.exit(10), 10);
+      return;
+    }
+    this.restartAttempt += 1;
+    const delay = Math.min(reconnectInitialDelayMs * Math.pow(2, this.restartAttempt - 1), reconnectMaxDelayMs);
+    console.warn(`ffmpeg exited (code=${code}). Scheduling ${this.protocolName(ingest)} reconnect attempt ${this.restartAttempt} in ${delay}ms`);
+    this.restartTimer = setTimeout(() => {
+      if (this.stopping) return;
+      this.launchFfmpeg().catch(err => console.error('ffmpeg restart failed', err));
+    }, delay);
+  }
+
+  private printSrtFailureHelp(ingest: string) {
+    // Attempt to extract host:port for guidance
+    const match = ingest.match(/^srt:\/\/(\[[^\]]+\]|[^:\/?]+)(?::(\d+))?/i);
+    const host = match?.[1] || 'HOST';
+    const port = match?.[2] || 'PORT';
+    console.error('\nSRT connection failed permanently. Troubleshooting suggestions:');
+    console.error(`  • Verify the ingest listener is running and accessible: srt://${host}:${port}`);
+    console.error('  • Confirm any firewalls / security groups allow UDP on the SRT port.');
+    console.error('  • Check that the streamid or query params are correct for the target provider.');
+    console.error('  • Test locally:');
+    console.error(`      ffmpeg -loglevel info -f mpegts -i "${ingest.replace(/"/g,'\\"')}" -f null -`);
+    console.error('  • Or run a local listener to validate output:');
+    console.error('      ffmpeg -f mpegts -i "srt://:9000?mode=listener" -f null -');
+    console.error('  • Increase verbosity with: --extra-ffmpeg -loglevel verbose');
+    console.error('  • Enable infinite retries: --reconnect-attempts 0');
+  }
+
+  private printRtmpFailureHelp(ingest: string) {
+    console.error('\nRTMP connection failed permanently. Troubleshooting suggestions:');
+    console.error('  • Verify the RTMP endpoint is reachable (TCP) and the stream key/path is correct.');
+    console.error('  • Check for required application context (e.g. rtmp://host/app/KEY).');
+    console.error('  • Validate with a simple publish test:');
+    console.error(`      ffmpeg -re -f lavfi -i testsrc=size=1280x720:rate=30 -f lavfi -i anullsrc -c:v libx264 -t 5 -f flv "${ingest.replace(/"/g,'\\"')}"`);
+    console.error('  • Some services require flv muxing: use --format flv');
+    console.error('  • Increase verbosity with: --extra-ffmpeg -loglevel verbose');
+  }
+
+  private printFailureHelp(ingest: string) {
+    if (/^srt:\/\//i.test(ingest)) return this.printSrtFailureHelp(ingest);
+    if (/^rtmps?:\/\//i.test(ingest)) return this.printRtmpFailureHelp(ingest);
+  }
+
+  private isRetryProtocol(ingest: string) {
+    return /^srt:\/\//i.test(ingest) || /^rtmps?:\/\//i.test(ingest);
+  }
+
+  private protocolName(ingest: string) {
+    if (/^srt:\/\//i.test(ingest)) return 'SRT';
+    if (/^rtmps?:\/\//i.test(ingest)) return 'RTMP';
+    return 'INGEST';
+  }
+
+  private startHealthLoop() {
+    const { healthIntervalSeconds, ingest } = this.opts;
+    if (!healthIntervalSeconds || healthIntervalSeconds <= 0) return;
+    const intervalMs = healthIntervalSeconds * 1000;
+    this.healthTimer = setInterval(() => {
+      const now = Date.now();
+      const uptimeSec = ((now - this.startTime) / 1000).toFixed(1);
+      const payload = {
+        type: 'health',
+        ts: new Date().toISOString(),
+        uptimeSec: Number(uptimeSec),
+        ingest,
+        protocol: this.protocolName(ingest),
+        restartAttempt: this.restartAttempt,
+        lastFfmpegExitCode: this.lastFfmpegExitCode,
+        retrying: !!this.restartTimer,
+      };
+      try {
+        console.log('[health]', JSON.stringify(payload));
+      } catch (e) {
+        // ignore
+      }
+    }, intervalMs);
+  }
+}
+
+async function main() {
+  const program = new Command();
+  program
+    .name('page-stream')
+    .description('Stream a web page (local file or URL) to an ingest (SRT/RTMP/etc)')
+    .requiredOption('-i, --ingest <uri>', 'Ingest URI (e.g. srt://host:port?streamid=... or rtmp://...)')
+    .option('-u, --url <url>', 'Page URL or local file path', DEMO_PAGE)
+  .option('--width <n>', 'Width', (v: string)=>parseInt(v,10), 1280)
+  .option('--height <n>', 'Height', (v: string)=>parseInt(v,10), 720)
+  .option('--fps <n>', 'Frames per second', (v: string)=>parseInt(v,10), 30)
+    .option('--preset <p>', 'x264 preset', 'veryfast')
+    .option('--video-bitrate <kbps>', 'Video bitrate (k)', '2500k')
+    .option('--audio-bitrate <kbps>', 'Audio bitrate (k)', '128k')
+    .option('--format <fmt>', 'Output container format', 'mpegts')
+    .option('--extra-ffmpeg <args...>', 'Extra raw ffmpeg args appended before output')
+    .option('--no-headless', 'Disable headless (show window if DISPLAY)')
+    .option('--refresh-signal <sig>', 'POSIX signal to trigger page refresh', 'SIGHUP')
+    .option('--graceful-stop-signal <sig>', 'Signal to gracefully stop', 'SIGTERM')
+  .option('--reconnect-attempts <n>', 'Max reconnect attempts for SRT (0 = infinite)', '0')
+  .option('--reconnect-initial-delay-ms <n>', 'Initial reconnect delay (ms)', '1000')
+  .option('--reconnect-max-delay-ms <n>', 'Max reconnect delay (ms)', '15000')
+  .option('--health-interval-seconds <n>', 'Interval for structured health log lines (0=disable)', '30')
+    .parse(process.argv);
+
+  const opts = program.opts();
+  // Automatic display size fallback: If env WIDTH/HEIGHT (Xvfb) differ from requested capture size,
+  // override the CLI width/height to prevent x11grab mismatch errors.
+  const envW = process.env.WIDTH ? parseInt(process.env.WIDTH,10) : undefined;
+  const envH = process.env.HEIGHT ? parseInt(process.env.HEIGHT,10) : undefined;
+  if (envW && envH && (envW !== opts.width || envH !== opts.height)) {
+    console.warn(`[display-mismatch] WARNING: Requested capture ${opts.width}x${opts.height} overridden to match Xvfb env ${envW}x${envH}.`);
+    console.warn('  Reason: differing sizes cause ffmpeg x11grab errors (capture area outside screen).');
+    console.warn('  To control resolution explicitly either:');
+    console.warn('    • Pass matching --width/--height OR');
+    console.warn('    • Unset WIDTH/HEIGHT env vars so CLI values apply, OR');
+    console.warn('    • Set both env and CLI to the same intended resolution.');
+    opts.width = envW;
+    opts.height = envH;
+  }
+  const streamer = new PageStreamer({
+    url: opts.url,
+    ingest: opts.ingest,
+    width: opts.width,
+    height: opts.height,
+    fps: opts.fps,
+    preset: opts.preset,
+    videoBitrate: opts.videoBitrate,
+    audioBitrate: opts.audioBitrate,
+    format: opts.format,
+    extraFfmpeg: opts.extraFfmpeg || [],
+    headless: false, // force non-headless so a window is rendered to Xvfb for x11grab
+    reconnectAttempts: parseInt(opts.reconnectAttempts, 10),
+    reconnectInitialDelayMs: parseInt(opts.reconnectInitialDelayMs, 10),
+    reconnectMaxDelayMs: parseInt(opts.reconnectMaxDelayMs, 10),
+    healthIntervalSeconds: parseInt(opts.healthIntervalSeconds, 10),
+  });
+
+
+  // Print early log before heavy startup so tests can assert output.
+  console.log(`Streaming page '${opts.url}' to ingest '${opts.ingest}' (${opts.width}x${opts.height}@${opts.fps}fps)`);
+
+  if (process.env.PAGE_STREAM_TEST_MODE) {
+    console.log('PAGE_STREAM_TEST_MODE enabled: skipping browser/ffmpeg startup.');
+  } else {
+    await streamer.start();
+  }
+
+  // Refresh on signal
+  process.on(opts.refreshSignal, () => {
+    streamer.refreshPage().catch(err => console.error('Refresh failed', err));
+  });
+
+  const stop = async () => {
+    console.log('Stopping...');
+    await streamer.stop();
+    process.exit(0);
+  };
+  process.on(opts.gracefulStopSignal, stop);
+  process.on('SIGINT', stop);
+  process.on('SIGTERM', stop);
+}
+
+if (import.meta.url === `file://${process.argv[1]}`) {
+  main().catch(err => { console.error(err); process.exit(1); });
+}

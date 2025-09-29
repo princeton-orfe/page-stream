@@ -1,0 +1,25 @@
+{
+  "name": "page-stream",
+  "version": "0.1.0",
+  "type": "module",
+  "description": "Headless web page compositor & streamer to SRT/other ingests using Puppeteer + FFmpeg.",
+  "scripts": {
+    "build": "tsc -p tsconfig.json && cp dist/src/index.js dist/index.js",
+    "start": "node dist/index.js",
+    "dev": "tsx watch src/index.ts",
+    "pretest": "npm run build",
+    "test": "node --test --loader ts-node/esm tests/*.test.ts"
+  },
+  "dependencies": {
+    "commander": "^11.1.0",
+  "playwright": "1.55.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.14.9",
+    "ts-node": "^10.9.2",
+    "tsx": "^4.16.2",
+    "typescript": "^5.5.4"
+  },
+  "engines": {"node": ">=18"},
+  "license": "MIT"
+}
