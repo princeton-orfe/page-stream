@@ -21,6 +21,7 @@ interface StreamOptions {
   extraFfmpeg: string[];
   headless: boolean;
   fullscreen: boolean; // launch chromium fullscreen (hide window chrome)
+  appMode: boolean; // use Chromium --app= (minimal UI, no address bar)
   reconnectAttempts: number; // 0 = infinite
   reconnectInitialDelayMs: number;
   reconnectMaxDelayMs: number;
@@ -58,54 +59,56 @@ class PageStreamer {
   }
 
   async launchBrowser() {
-    this.browser = await chromium.launch({
-      headless: this.opts.headless,
-      args: [
-        '--disable-dev-shm-usage',
-        '--no-sandbox',
-        `--window-size=${this.opts.width},${this.opts.height}`,
-        ...(this.opts.fullscreen ? [
-          '--kiosk',              // kiosk style, suppresses most chrome
-          '--start-fullscreen',   // start in fullscreen (some builds honor this over kiosk)
-          '--hide-scrollbars',    // reduce visual clutter
-          '--disable-infobars',   // no "Chrome is being controlled" bar
-          '--autoplay-policy=no-user-gesture-required'
-        ] : [])
-      ]
-    });
-    const ctx = await this.browser.newContext({
-      viewport: { width: this.opts.width, height: this.opts.height }
-    });
-    this.page = await ctx.newPage();
-    await this.page.goto(this.toFileUrlIfNeeded(this.opts.url));
-    if (this.opts.fullscreen) {
-      try {
-        // Give focus to body so F11 style toggles will apply if window manager honors them.
-        await this.page.evaluate(() => {
-          try { document.body?.focus(); } catch {}
-        });
-        // DOM fullscreen (may fail silently in some kiosk/headless contexts)
-        await this.page.evaluate(() => {
-          const el: any = document.documentElement;
-          if (el && el.requestFullscreen) {
-            el.requestFullscreen().catch(()=>{});
-          }
-        });
-        // Fallback: send F11 (ignored if unsupported)
-        try { await this.page.keyboard.press('F11'); } catch {}
-      } catch (e) {
-        // Non-fatal: fullscreen best effort only.
-      }
+    const commonArgs = [
+      '--disable-dev-shm-usage',
+      '--no-sandbox',
+      `--window-size=${this.opts.width},${this.opts.height}`,
+      ...(this.opts.fullscreen ? [
+        '--kiosk',
+        '--start-fullscreen',
+        '--hide-scrollbars',
+        '--disable-infobars',
+        '--autoplay-policy=no-user-gesture-required'
+      ] : [])
+    ];
+    const startUrl = this.toFileUrlIfNeeded(this.opts.url);
+    if (this.opts.appMode) {
+      commonArgs.push(`--app=${startUrl}`);
     }
-    if (this.opts.fullscreen) {
+    this.browser = await chromium.launch({ headless: this.opts.headless, args: commonArgs });
+    if (this.opts.appMode) {
+      // Attempt to find the app window (Playwright surfaces it as an existing page)
+      let pageFound: Page | undefined;
+      const deadline = Date.now() + 3000;
+      while (!pageFound && Date.now() < deadline) {
+        const ctxs = this.browser.contexts();
+        if (ctxs.length) {
+          const pages = ctxs[0].pages();
+          if (pages.length) pageFound = pages[0];
+        }
+        if (!pageFound) await new Promise(r => setTimeout(r, 50));
+      }
+      if (!pageFound) {
+        // Fallback create a fresh context/page
+        const ctx = await this.browser.newContext({ viewport: { width: this.opts.width, height: this.opts.height } });
+        pageFound = await ctx.newPage();
+        await pageFound.goto(startUrl);
+      }
+      this.page = pageFound;
+    } else {
+      const ctx = await this.browser.newContext({ viewport: { width: this.opts.width, height: this.opts.height } });
+      this.page = await ctx.newPage();
+      await this.page.goto(startUrl);
+    }
+    if (this.opts.fullscreen && this.page) {
       try {
-        // Attempt DOM fullscreen; fallback to F11 key if needed (not always reliable in headless/Xvfb).
+        await this.page.evaluate(() => { try { document.body?.focus(); } catch {} });
         await this.page.evaluate(() => {
-          const el = document.documentElement as any;
-          if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+          const el: any = document.documentElement; if (el?.requestFullscreen) el.requestFullscreen().catch(()=>{});
         });
-      } catch (e) {
-        // Non-fatal.
+        try { await this.page.keyboard.press('F11'); } catch {}
+      } catch {
+        // ignore
       }
     }
   }
@@ -296,6 +299,7 @@ async function main() {
     .option('--extra-ffmpeg <args...>', 'Extra raw ffmpeg args appended before output')
     .option('--no-headless', 'Disable headless (show window if DISPLAY)')
     .option('--no-fullscreen', 'Disable fullscreen (windowed)')
+  .option('--no-app-mode', 'Disable Chromium app mode (show full browser UI)')
     .option('--refresh-signal <sig>', 'POSIX signal to trigger page refresh', 'SIGHUP')
     .option('--graceful-stop-signal <sig>', 'Signal to gracefully stop', 'SIGTERM')
   .option('--reconnect-attempts <n>', 'Max reconnect attempts for SRT (0 = infinite)', '0')
@@ -333,6 +337,7 @@ async function main() {
     extraFfmpeg: opts.extraFfmpeg || [],
     headless: false, // force non-headless so a window is rendered to Xvfb for x11grab
     fullscreen: opts.fullscreen !== false,
+    appMode: opts.appMode !== false,
     reconnectAttempts: parseInt(opts.reconnectAttempts, 10),
     reconnectInitialDelayMs: parseInt(opts.reconnectInitialDelayMs, 10),
     reconnectMaxDelayMs: parseInt(opts.reconnectMaxDelayMs, 10),

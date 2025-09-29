@@ -18,6 +18,7 @@ Headless, disposable web page video streamer for SRT (priority) and other ingest
  - Auto-retry with exponential backoff for SRT and RTMP (same flags) with clear failure diagnostics.
  - Structured periodic health log lines (JSON) for observability.
  - Optional noVNC (VNC over WebSocket) viewer to interact with the Chromium session (disabled by default).
+ - Minimal-UI app mode (Chromium --app=) to hide address bar / navigation chrome (enabled by default).
 
 ## How It Works
 
@@ -103,6 +104,7 @@ Optional:
       --extra-ffmpeg <args..> Additional raw ffmpeg args
       --no-headless           Disable headless Chromium
   --no-fullscreen         Disable fullscreen mode (enabled by default; best-effort kiosk/fullscreen under Xvfb)
+  --no-app-mode           Disable Chromium app mode (shows normal browser chrome)
       --refresh-signal <sig>  Signal for page reload (default SIGHUP)
     --graceful-stop-signal <sig> Signal for graceful stop (default SIGTERM)
   --reconnect-attempts <n>     Max reconnect attempts for SRT/RTMP (0 = infinite, default 0)
