@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawn, ChildProcessWithoutNullStreams } from 'node:child_process';
 import fs from 'node:fs';
-import { chromium, Browser, Page } from 'playwright';
+import { chromium, Browser, Page, BrowserContext } from 'playwright';
+import os from 'node:os';
 
 interface StreamOptions {
   url: string;
@@ -36,6 +37,7 @@ const DEMO_PAGE = path.join(__dirname, '..', 'demo', 'index.html');
 class PageStreamer {
   private browser?: Browser;
   private page?: Page;
+  private persistentContext?: BrowserContext;
   private ff?: ChildProcessWithoutNullStreams;
   private refreshing = false;
   private stopping = false;
@@ -45,6 +47,7 @@ class PageStreamer {
   private startTime = Date.now();
   private lastFfmpegExitCode: number | null = null;
   private autoRefreshTimer?: NodeJS.Timeout;
+  private userDataDir?: string;
 
   constructor(private opts: StreamOptions) {}
 
@@ -73,29 +76,27 @@ class PageStreamer {
     ];
     const startUrl = this.toFileUrlIfNeeded(this.opts.url);
     if (this.opts.appMode) {
+      // Use persistent context so Chromium honors --app without spawning an unattached window.
+      this.userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pgstream-')); // ephemeral profile
       commonArgs.push(`--app=${startUrl}`);
-    }
-    this.browser = await chromium.launch({ headless: this.opts.headless, args: commonArgs });
-    if (this.opts.appMode) {
-      // Attempt to find the app window (Playwright surfaces it as an existing page)
-      let pageFound: Page | undefined;
-      const deadline = Date.now() + 3000;
-      while (!pageFound && Date.now() < deadline) {
-        const ctxs = this.browser.contexts();
-        if (ctxs.length) {
-          const pages = ctxs[0].pages();
-          if (pages.length) pageFound = pages[0];
-        }
-        if (!pageFound) await new Promise(r => setTimeout(r, 50));
-      }
+      commonArgs.push('--no-first-run','--no-default-browser-check','--disable-features=TranslateUI','--disable-translate');
+      this.persistentContext = await chromium.launchPersistentContext(this.userDataDir, {
+        headless: this.opts.headless,
+        args: commonArgs,
+        viewport: { width: this.opts.width, height: this.opts.height }
+      });
+      // First page should be the app window.
+      let pageFound = this.persistentContext.pages()[0];
       if (!pageFound) {
-        // Fallback create a fresh context/page
-        const ctx = await this.browser.newContext({ viewport: { width: this.opts.width, height: this.opts.height } });
-        pageFound = await ctx.newPage();
+        pageFound = await this.persistentContext.newPage();
         await pageFound.goto(startUrl);
       }
       this.page = pageFound;
+      // Expose browser object for unified shutdown logic
+  const b = this.persistentContext.browser();
+  if (b) this.browser = b;
     } else {
+      this.browser = await chromium.launch({ headless: this.opts.headless, args: commonArgs });
       const ctx = await this.browser.newContext({ viewport: { width: this.opts.width, height: this.opts.height } });
       this.page = await ctx.newPage();
       await this.page.goto(startUrl);
@@ -183,7 +184,15 @@ class PageStreamer {
     if (this.healthTimer) clearTimeout(this.healthTimer);
     if (this.autoRefreshTimer) clearInterval(this.autoRefreshTimer);
     await this.page?.close();
-    await this.browser?.close();
+    if (this.persistentContext) {
+      await this.persistentContext.close();
+    } else {
+      await this.browser?.close();
+    }
+    if (this.userDataDir) {
+      // Best-effort cleanup of the temporary profile directory
+      try { fs.rmSync(this.userDataDir, { recursive: true, force: true }); } catch {}
+    }
     if (this.ff && !this.ff.killed) this.ff.kill('SIGINT');
   }
 
