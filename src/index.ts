@@ -20,10 +20,12 @@ interface StreamOptions {
   format: string; // container format, e.g. mpegts, flv
   extraFfmpeg: string[];
   headless: boolean;
+  fullscreen: boolean; // launch chromium fullscreen (hide window chrome)
   reconnectAttempts: number; // 0 = infinite
   reconnectInitialDelayMs: number;
   reconnectMaxDelayMs: number;
   healthIntervalSeconds: number; // 0 = disabled
+  autoRefreshSeconds: number; // 0 = disabled
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -41,6 +43,7 @@ class PageStreamer {
   private healthTimer?: NodeJS.Timeout;
   private startTime = Date.now();
   private lastFfmpegExitCode: number | null = null;
+  private autoRefreshTimer?: NodeJS.Timeout;
 
   constructor(private opts: StreamOptions) {}
 
@@ -68,6 +71,17 @@ class PageStreamer {
     });
     this.page = await ctx.newPage();
     await this.page.goto(this.toFileUrlIfNeeded(this.opts.url));
+    if (this.opts.fullscreen) {
+      try {
+        // Attempt DOM fullscreen; fallback to F11 key if needed (not always reliable in headless/Xvfb).
+        await this.page.evaluate(() => {
+          const el = document.documentElement as any;
+          if (el.requestFullscreen) el.requestFullscreen().catch(()=>{});
+        });
+      } catch (e) {
+        // Non-fatal.
+      }
+    }
   }
 
   toFileUrlIfNeeded(u: string) {
@@ -138,6 +152,7 @@ class PageStreamer {
     this.stopping = true;
     if (this.restartTimer) clearTimeout(this.restartTimer);
     if (this.healthTimer) clearTimeout(this.healthTimer);
+    if (this.autoRefreshTimer) clearInterval(this.autoRefreshTimer);
     await this.page?.close();
     await this.browser?.close();
     if (this.ff && !this.ff.killed) this.ff.kill('SIGINT');
@@ -254,12 +269,14 @@ async function main() {
     .option('--format <fmt>', 'Output container format', 'mpegts')
     .option('--extra-ffmpeg <args...>', 'Extra raw ffmpeg args appended before output')
     .option('--no-headless', 'Disable headless (show window if DISPLAY)')
+    .option('--no-fullscreen', 'Disable fullscreen (windowed)')
     .option('--refresh-signal <sig>', 'POSIX signal to trigger page refresh', 'SIGHUP')
     .option('--graceful-stop-signal <sig>', 'Signal to gracefully stop', 'SIGTERM')
   .option('--reconnect-attempts <n>', 'Max reconnect attempts for SRT (0 = infinite)', '0')
   .option('--reconnect-initial-delay-ms <n>', 'Initial reconnect delay (ms)', '1000')
   .option('--reconnect-max-delay-ms <n>', 'Max reconnect delay (ms)', '15000')
   .option('--health-interval-seconds <n>', 'Interval for structured health log lines (0=disable)', '30')
+  .option('--auto-refresh-seconds <n>', 'Automatically refresh the page every N seconds (0=disable)', '0')
     .parse(process.argv);
 
   const opts = program.opts();
@@ -289,10 +306,12 @@ async function main() {
     format: opts.format,
     extraFfmpeg: opts.extraFfmpeg || [],
     headless: false, // force non-headless so a window is rendered to Xvfb for x11grab
+    fullscreen: opts.fullscreen !== false,
     reconnectAttempts: parseInt(opts.reconnectAttempts, 10),
     reconnectInitialDelayMs: parseInt(opts.reconnectInitialDelayMs, 10),
     reconnectMaxDelayMs: parseInt(opts.reconnectMaxDelayMs, 10),
     healthIntervalSeconds: parseInt(opts.healthIntervalSeconds, 10),
+    autoRefreshSeconds: parseInt(opts.autoRefreshSeconds, 10),
   });
 
 
@@ -303,6 +322,14 @@ async function main() {
     console.log('PAGE_STREAM_TEST_MODE enabled: skipping browser/ffmpeg startup.');
   } else {
     await streamer.start();
+    // Set up automatic refresh interval if configured
+    if (streamer['opts'].autoRefreshSeconds && streamer['opts'].autoRefreshSeconds > 0) {
+      const secs = streamer['opts'].autoRefreshSeconds;
+      (streamer as any).autoRefreshTimer = setInterval(() => {
+        streamer.refreshPage().catch(err => console.error('Auto-refresh failed', err));
+      }, secs * 1000);
+      console.log(`Auto-refresh enabled: every ${secs} seconds.`);
+    }
   }
 
   // Refresh on signal
