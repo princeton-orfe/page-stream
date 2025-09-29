@@ -102,7 +102,7 @@ Optional:
       --format <fmt>          Container format (default mpegts)
       --extra-ffmpeg <args..> Additional raw ffmpeg args
       --no-headless           Disable headless Chromium
-      --no-fullscreen         Disable fullscreen mode (enabled by default)
+  --no-fullscreen         Disable fullscreen mode (enabled by default; best-effort kiosk/fullscreen under Xvfb)
       --refresh-signal <sig>  Signal for page reload (default SIGHUP)
     --graceful-stop-signal <sig> Signal for graceful stop (default SIGTERM)
   --reconnect-attempts <n>     Max reconnect attempts for SRT/RTMP (0 = infinite, default 0)
