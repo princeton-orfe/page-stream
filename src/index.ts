@@ -28,6 +28,7 @@ interface StreamOptions {
   reconnectMaxDelayMs: number;
   healthIntervalSeconds: number; // 0 = disabled
   autoRefreshSeconds: number; // 0 = disabled
+  suppressAutomationBanner: boolean; // hide "controlled by automated test software" message
 }
 
 const __filename = fileURLToPath(import.meta.url);
@@ -48,6 +49,7 @@ class PageStreamer {
   private lastFfmpegExitCode: number | null = null;
   private autoRefreshTimer?: NodeJS.Timeout;
   private userDataDir?: string;
+  private suppressApplied = false;
 
   constructor(private opts: StreamOptions) {}
 
@@ -80,11 +82,18 @@ class PageStreamer {
       this.userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'pgstream-')); // ephemeral profile
       commonArgs.push(`--app=${startUrl}`);
       commonArgs.push('--no-first-run','--no-default-browser-check','--disable-features=TranslateUI','--disable-translate');
+      if (this.opts.suppressAutomationBanner) {
+        // Additional blink feature disable to reduce automation indicators
+        commonArgs.push('--disable-blink-features=AutomationControlled');
+      }
       this.persistentContext = await chromium.launchPersistentContext(this.userDataDir, {
         headless: this.opts.headless,
         args: commonArgs,
         viewport: { width: this.opts.width, height: this.opts.height }
       });
+      if (this.opts.suppressAutomationBanner) {
+        await this.installAutomationBannerSuppression(this.persistentContext);
+      }
       // First page should be the app window.
       let pageFound = this.persistentContext.pages()[0];
       if (!pageFound) {
@@ -98,6 +107,9 @@ class PageStreamer {
     } else {
       this.browser = await chromium.launch({ headless: this.opts.headless, args: commonArgs });
       const ctx = await this.browser.newContext({ viewport: { width: this.opts.width, height: this.opts.height } });
+      if (this.opts.suppressAutomationBanner) {
+        await this.installAutomationBannerSuppression(ctx);
+      }
       this.page = await ctx.newPage();
       await this.page.goto(startUrl);
     }
@@ -112,6 +124,45 @@ class PageStreamer {
         // ignore
       }
     }
+  }
+
+  private async installAutomationBannerSuppression(ctx: BrowserContext) {
+    if (this.suppressApplied) return;
+    this.suppressApplied = true;
+    const inject = () => {
+      try {
+        // Remove automation UI indicators repeatedly using MutationObserver
+        const kill = () => {
+          const needle = /is being controlled by automated test software/i;
+          const walker = document.createTreeWalker(document.body || document.documentElement, NodeFilter.SHOW_ELEMENT);
+          while (walker.nextNode()) {
+            const el = walker.currentNode as HTMLElement;
+            if (!el) continue;
+            const txt = el.innerText || '';
+            if (needle.test(txt)) {
+              el.style.display = 'none';
+              el.setAttribute('data-automation-hidden','1');
+            }
+          }
+        };
+        kill();
+        const mo = new MutationObserver(() => kill());
+        mo.observe(document.documentElement, { childList: true, subtree: true });
+        // Also override navigator.webdriver property common detection
+        Object.defineProperty(navigator, 'webdriver', { get: () => undefined });
+      } catch {}
+    };
+    await ctx.addInitScript(inject);
+    // Apply to any already existing pages
+    for (const p of ctx.pages()) {
+      try { await p.addInitScript(inject); await p.evaluate(() => {}); } catch {}
+    }
+    ctx.on('page', page => {
+      page.addInitScript(inject).catch(()=>{});
+      page.on('domcontentloaded', () => {
+        page.evaluate(() => {}).catch(()=>{});
+      });
+    });
   }
 
   toFileUrlIfNeeded(u: string) {
@@ -309,6 +360,7 @@ async function main() {
     .option('--no-headless', 'Disable headless (show window if DISPLAY)')
     .option('--no-fullscreen', 'Disable fullscreen (windowed)')
   .option('--no-app-mode', 'Disable Chromium app mode (show full browser UI)')
+  .option('--no-suppress-automation-banner', 'Do not hide Chromium automation banner')
     .option('--refresh-signal <sig>', 'POSIX signal to trigger page refresh', 'SIGHUP')
     .option('--graceful-stop-signal <sig>', 'Signal to gracefully stop', 'SIGTERM')
   .option('--reconnect-attempts <n>', 'Max reconnect attempts for SRT (0 = infinite)', '0')
@@ -352,6 +404,7 @@ async function main() {
     reconnectMaxDelayMs: parseInt(opts.reconnectMaxDelayMs, 10),
     healthIntervalSeconds: parseInt(opts.healthIntervalSeconds, 10),
     autoRefreshSeconds: parseInt(opts.autoRefreshSeconds, 10),
+    suppressAutomationBanner: opts.suppressAutomationBanner !== false,
   });
 
 
