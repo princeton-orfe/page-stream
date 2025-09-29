@@ -63,7 +63,14 @@ class PageStreamer {
       args: [
         '--disable-dev-shm-usage',
         '--no-sandbox',
-        `--window-size=${this.opts.width},${this.opts.height}`
+        `--window-size=${this.opts.width},${this.opts.height}`,
+        ...(this.opts.fullscreen ? [
+          '--kiosk',              // kiosk style, suppresses most chrome
+          '--start-fullscreen',   // start in fullscreen (some builds honor this over kiosk)
+          '--hide-scrollbars',    // reduce visual clutter
+          '--disable-infobars',   // no "Chrome is being controlled" bar
+          '--autoplay-policy=no-user-gesture-required'
+        ] : [])
       ]
     });
     const ctx = await this.browser.newContext({
@@ -71,6 +78,25 @@ class PageStreamer {
     });
     this.page = await ctx.newPage();
     await this.page.goto(this.toFileUrlIfNeeded(this.opts.url));
+    if (this.opts.fullscreen) {
+      try {
+        // Give focus to body so F11 style toggles will apply if window manager honors them.
+        await this.page.evaluate(() => {
+          try { document.body?.focus(); } catch {}
+        });
+        // DOM fullscreen (may fail silently in some kiosk/headless contexts)
+        await this.page.evaluate(() => {
+          const el: any = document.documentElement;
+          if (el && el.requestFullscreen) {
+            el.requestFullscreen().catch(()=>{});
+          }
+        });
+        // Fallback: send F11 (ignored if unsupported)
+        try { await this.page.keyboard.press('F11'); } catch {}
+      } catch (e) {
+        // Non-fatal: fullscreen best effort only.
+      }
+    }
     if (this.opts.fullscreen) {
       try {
         // Attempt DOM fullscreen; fallback to F11 key if needed (not always reliable in headless/Xvfb).
