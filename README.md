@@ -244,27 +244,6 @@ Notes:
 
 Setting `PAGE_STREAM_TEST_MODE=1` skips launching the browser & ffmpeg while still exercising CLI parsing. This is used by the included test suite for fast feedback.
 
-## ARM64 (Apple Silicon) Notes
-
-If you previously saw an error like `qemu-x86_64: Could not open '/lib64/ld-linux-x86-64.so.2'` that was due to Puppeteer fetching an x86_64 Chromium for an ARM64 base. Migrating to the Playwright base image removes that mismatch (browsers pre-bundled per architecture). Rebuild the image after pulling latest changes:
-
-```
-docker build --no-cache -t page-stream:latest .
-```
-
-If you need a multi-arch pushed image:
-```
-docker buildx build --platform linux/amd64,linux/arm64 -t yourrepo/page-stream:multi --push .
-```
-
-## Roadmap / Next Steps
-
-- Optional direct Chromium tab capture (remove X11 dependency) using experimental headless new.
-- Support for capturing audio (PulseAudio virtual source).
-- Dynamic scene switching via simple websocket control channel.
-- Metrics endpoint (health, dropped frames, restart counts).
-- Better test coverage (mock Puppeteer, integration test with a dummy SRT listener).
-
 ## Testing
 
 Current tests (Node built-in test runner) validate CLI basics.
@@ -273,11 +252,3 @@ Current tests (Node built-in test runner) validate CLI basics.
 npm run build
 npm test
 ```
-
-## Contributing
-
-PRs welcome. Please keep the container lean and cross-platform friendly.
-
-## License
-
-MIT
