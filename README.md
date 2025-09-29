@@ -9,6 +9,7 @@ Headless, disposable web page video streamer for SRT (priority) and other ingest
 - Primary support for SRT ingest (e.g. `srt://host:port?streamid=...`).
 - Also works with RTMP or other `ffmpeg` supported outputs (just change the ingest URI & format flags).
 - Refresh the streamed page live via signal (default `HUP`) without restarting the container or ffmpeg pipeline.
+ - Refresh the streamed page live via signal (default `HUP`) without restarting the container or ffmpeg pipeline, or enable automatic periodic refresh.
 - Configurable resolution, FPS, bitrate, codec preset, and extra raw ffmpeg args.
 - Graceful shutdown on `SIGTERM` / `SIGINT`.
 - Extensible Node.js CLI (TypeScript) + minimal test harness.
@@ -58,7 +59,7 @@ If the provided `--url` is not an absolute HTTP(S) URL and does not exist as a l
 
 ## Refreshing the Streamed Page
 
-Two methods:
+Manual refresh methods (either works):
 
 1. Send `HUP` to the main process (inside container this is PID 1):
    ```bash
@@ -68,6 +69,19 @@ Two methods:
    ```bash
    docker exec <container-id> sh -c 'echo refresh > /tmp/page_refresh_fifo'
    ```
+
+### Automatic Periodic Refresh
+
+Add `--auto-refresh-seconds <n>` to automatically reload the page every _n_ seconds (the ffmpeg pipeline is not restarted; only the page is reloaded). Example:
+
+```bash
+docker run --rm \
+  -e WIDTH=1280 -e HEIGHT=720 \
+  page-stream:dev \
+  --ingest srt://your-srt-host:9000?streamid=yourStreamId \
+  --url demo/index.html \
+  --auto-refresh-seconds 300   # reload every 5 minutes
+```
 
 ## CLI Options
 
@@ -88,12 +102,14 @@ Optional:
       --format <fmt>          Container format (default mpegts)
       --extra-ffmpeg <args..> Additional raw ffmpeg args
       --no-headless           Disable headless Chromium
+      --no-fullscreen         Disable fullscreen mode (enabled by default)
       --refresh-signal <sig>  Signal for page reload (default SIGHUP)
     --graceful-stop-signal <sig> Signal for graceful stop (default SIGTERM)
   --reconnect-attempts <n>     Max reconnect attempts for SRT/RTMP (0 = infinite, default 0)
   --reconnect-initial-delay-ms <n>  Initial reconnect delay ms (default 1000)
   --reconnect-max-delay-ms <n>      Max reconnect delay ms (default 15000)
   --health-interval-seconds <n> Interval for structured health log lines (0=disable, default 30)
+  --auto-refresh-seconds <n>  Auto page reload interval in seconds (0=disable)
 ```
 
 ## SRT Examples
