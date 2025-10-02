@@ -12,12 +12,15 @@ services:
       - ./custom.js:/custom.js
       - ./custom.css:/custom.css
     command: >
-      --ingest srt://compositor:10001?streamid=page1
+      --ingest srt://page-stream-compositor:10001?streamid=page1
       --url "https://example.com/page1"
       --auto-refresh-seconds 1800
       --inject-css /custom.css
       --inject-js /custom.js
       --crop-infobar 64
+    depends_on:
+      compositor:
+        condition: service_healthy
     networks:
       - compositor_net
 
@@ -32,21 +35,27 @@ services:
       - ./custom.js:/custom.js
       - ./custom.css:/custom.css
     command: >
-      --ingest srt://compositor:10002?streamid=page2
+      --ingest srt://page-stream-compositor:10002?streamid=page2
       --url "https://example.com/page2"
       --auto-refresh-seconds 1800
       --inject-css /custom.css
       --inject-js /custom.js
       --crop-infobar 64
+    depends_on:
+      compositor:
+        condition: service_healthy
     networks:
       - compositor_net
 
   compositor:
-    image: jrottenberg/ffmpeg:5.1-ubuntu
+    build: .
+    image: page-stream:latest
     container_name: page-stream-compositor
     environment:
       # Set COMPOSITOR_INGEST to your final ingest URI (SRT/RTMP/etc)
-      - COMPOSITOR_INGEST=output.ts
+      - COMPOSITOR_INGEST=/out/output.ts
+    volumes:
+      - ./out:/out
     # Optional: expose compositor listener ports to host for testing
     ports:
       - "10001:10001"
@@ -61,7 +70,13 @@ services:
         -map "[outv]" -map "[a]"
         -c:v libx264 -preset veryfast -b:v 4000k -maxrate 4500k -bufsize 8000k
         -c:a aac -b:a 128k
-        -f mpegts "$${COMPOSITOR_INGEST:-output.ts}"
+        -f mpegts "${COMPOSITOR_INGEST}"
+    healthcheck:
+      test: ["CMD-SHELL", "pgrep ffmpeg || exit 1"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+      start_period: 10s
     networks:
       - compositor_net
 
