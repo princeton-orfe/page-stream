@@ -56,10 +56,6 @@ services:
       - COMPOSITOR_INGEST=output.ts
     volumes:
       - ./out:/out
-    # Optional: expose compositor listener ports to host for testing
-    ports:
-      - "10001:10001"
-      - "10002:10002"
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
