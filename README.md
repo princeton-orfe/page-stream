@@ -300,5 +300,3 @@ Scaling & alternatives:
 Troubleshooting
 - If one of the page-stream sources fails to connect, the compositor will show dropped frames or black areas until the source reconnects. Start the compositor after sources (or use supervision scripts) for a cleaner startup.
 - For production, use restart policies and health checks in your orchestration platform.
-
-If you want, I can create a small helper script (`make-compose.sh`) to generate `filter_complex` strings dynamically for N inputs and commit it to the `compositor` branch.
