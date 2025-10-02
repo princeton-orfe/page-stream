@@ -1,0 +1,71 @@
+version: '3.8'
+
+services:
+  page1:
+    build: .
+    image: page-stream:latest
+    container_name: page1
+    environment:
+      - WIDTH=960
+      - HEIGHT=1144
+    volumes:
+      - ./custom.js:/custom.js
+      - ./custom.css:/custom.css
+    command: >
+      --ingest srt://compositor:10001?streamid=page1
+      --url "https://example.com/page1"
+      --auto-refresh-seconds 1800
+      --inject-css /custom.css
+      --inject-js /custom.js
+      --crop-infobar 64
+    networks:
+      - compositor_net
+
+  page2:
+    build: .
+    image: page-stream:latest
+    container_name: page2
+    environment:
+      - WIDTH=960
+      - HEIGHT=1144
+    volumes:
+      - ./custom.js:/custom.js
+      - ./custom.css:/custom.css
+    command: >
+      --ingest srt://compositor:10002?streamid=page2
+      --url "https://example.com/page2"
+      --auto-refresh-seconds 1800
+      --inject-css /custom.css
+      --inject-js /custom.js
+      --crop-infobar 64
+    networks:
+      - compositor_net
+
+  compositor:
+    image: jrottenberg/ffmpeg:5.1-ubuntu
+    container_name: page-stream-compositor
+    environment:
+      # Set COMPOSITOR_INGEST to your final ingest URI (SRT/RTMP/etc)
+      - COMPOSITOR_INGEST=output.ts
+    # Optional: expose compositor listener ports to host for testing
+    ports:
+      - "10001:10001"
+      - "10002:10002"
+    command: >
+      bash -lc "ffmpeg -hide_banner -loglevel info \
+        -i 'srt://0.0.0.0:10001?mode=listener' \
+        -i 'srt://0.0.0.0:10002?mode=listener' \
+        -filter_complex '\\
+          [0:v]scale=960:1144[left]; \
+          [1:v]scale=960:1144[right]; \
+          [left][right]hstack=inputs=2[outv]; \
+          [0:a]aresample=async=1[la]; [1:a]aresample=async=1[ra]; [la][ra]amerge=inputs=2[a]\\\n+        ' \
+        -map '[outv]' -map '[a]' \
+        -c:v libx264 -preset veryfast -b:v 4000k -maxrate 4500k -bufsize 8000k \
+        -c:a aac -b:a 128k -f mpegts "$${COMPOSITOR_INGEST:-output.ts""
+    networks:
+      - compositor_net
+
+networks:
+  compositor_net:
+    driver: bridge

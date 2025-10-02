@@ -268,3 +268,37 @@ The tool tries to minimize any non-content chrome from Chromium for clean broadc
   - Cropping is disabled by default (value 0). Choose a value slightly larger than the infobar height (common ranges: 30–50) to fully remove it.
 
 Health log lines include `infobarDismissTried` when the xdotool heuristic ran.
+
+## Multi-container compositor example (docker-compose)
+
+This example demonstrates a scalable pattern where multiple `page-stream` instances each publish a stream to a small compositor service (FFmpeg) which combines them into a single final ingest. It's useful when you want isolation per source (separate browser instances, independent injection) or to scale to many inputs.
+
+- `page1` and `page2` run the `page-stream` image and push SRT to the compositor on ports `10001` and `10002`.
+- `page-stream-compositor` runs an FFmpeg listener that accepts the two SRT inputs, stacks them side-by-side (50/50), merges audio, and forwards the combined output to `COMPOSITOR_INGEST`.
+
+File: `docker-compose.compositor.yml` (included in the repo)
+
+How to run locally (build first then up):
+
+```bash
+# Build the page-stream image locally
+docker-compose -f docker-compose.compositor.yml build
+
+# Launch the topology
+docker-compose -f docker-compose.compositor.yml up
+```
+
+Configuration notes:
+- Edit `COMPOSITOR_INGEST` in the `compositor` service to set the final ingest URI (SRT/RTMP/etc). The default in the compose file is `output.ts` for local testing.
+- The compose file exposes the compositor SRT ports `10001`/`10002` to the host so you can test connectivity; the container network keeps internal traffic local and fast.
+
+Scaling & alternatives:
+- To add more sources, add more `page-stream` services (page3, page4...) and extend the FFmpeg `-i ...` arguments and `filter_complex` to tile them (use `hstack`/`vstack` or `xstack` for >2 inputs). For example, `xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0`.
+- If you prefer lower latency and fewer ffmpeg CPU transcodes, consider using the compositor to remux rather than re-encode (if inputs already match output codec/bitrate/profile) — this is more advanced and requires input coordination.
+- Another option is a single composite HTML (one `page-stream`) that uses iframes; that's the simplest approach but limited by cross-origin restrictions if you need to inject into each source.
+
+Troubleshooting
+- If one of the page-stream sources fails to connect, the compositor will show dropped frames or black areas until the source reconnects. Start the compositor after sources (or use supervision scripts) for a cleaner startup.
+- For production, use restart policies and health checks in your orchestration platform.
+
+If you want, I can create a small helper script (`make-compose.sh`) to generate `filter_complex` strings dynamically for N inputs and commit it to the `compositor` branch.
