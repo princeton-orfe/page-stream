@@ -69,7 +69,7 @@ services:
         -i srt://0.0.0.0:10002?mode=listener
         -filter_complex "[0:v]scale=960:1144[left];[1:v]scale=960:1144[right];[left][right]hstack=inputs=2[outv]"
         -map "[outv]" -map 0:a?
-        -c:v libx264 -preset veryfast -b:v 4000k -maxrate 4500k -bufsize 8000k -g 60 -keyint_min 60 -sc_threshold 0
+        -c:v libx264 -preset ultrafast -tune zerolatency -b:v 3000k -maxrate 3500k -bufsize 6000k -g 30 -keyint_min 30 -sc_threshold 0
         -c:a aac -b:a 128k -ar 44100
         -f mpegts "$${COMPOSITOR_INGEST:-output.ts}"
     healthcheck:
