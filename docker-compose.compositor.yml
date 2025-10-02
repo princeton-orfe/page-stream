@@ -53,7 +53,7 @@ services:
     container_name: page-stream-compositor
     environment:
       # Set COMPOSITOR_INGEST to your final ingest URI (SRT/RTMP/etc)
-      - COMPOSITOR_INGEST=/out/output.ts
+      - COMPOSITOR_INGEST=output.ts
     volumes:
       - ./out:/out
     # Optional: expose compositor listener ports to host for testing
@@ -63,6 +63,7 @@ services:
     entrypoint: ["/bin/sh", "-c"]
     command:
       - >
+        mkdir -p /out &&
         ffmpeg -hide_banner -loglevel info
         -i srt://0.0.0.0:10001?mode=listener
         -i srt://0.0.0.0:10002?mode=listener
@@ -70,7 +71,7 @@ services:
         -map "[outv]" -map "[a]"
         -c:v libx264 -preset veryfast -b:v 4000k -maxrate 4500k -bufsize 8000k
         -c:a aac -b:a 128k
-        -f mpegts "${COMPOSITOR_INGEST}"
+        -f mpegts "${COMPOSITOR_INGEST:-output.ts}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep ffmpeg || exit 1"]
       interval: 5s
