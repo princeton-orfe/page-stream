@@ -3,3 +3,6 @@ dist
 npm-debug.log*
 .DS_Store
 *.tsbuildinfo
+
+# Ignore local docker-compose files in repository root (examples live under /examples)
+docker-compose.yml
