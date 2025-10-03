@@ -276,16 +276,16 @@ This example demonstrates a scalable pattern where multiple `page-stream` instan
 - `page1` and `page2` run the `page-stream` image and push SRT to the compositor on ports `10001` and `10002`.
 - `page-stream-compositor` runs an FFmpeg listener that accepts the two SRT inputs, stacks them side-by-side (50/50), merges audio, and forwards the combined output to `COMPOSITOR_INGEST`.
 
-File: `docker-compose.compositor.yml` (included in the repo)
+File: `examples/docker-compose.compositor.example.yml` (included in the repo)
 
 How to run locally (build first then up):
 
 ```bash
 # Build the page-stream image locally
-docker-compose -f docker-compose.compositor.yml build
+docker-compose -f examples/docker-compose.compositor.example.yml build
 
 # Launch the topology
-docker-compose -f docker-compose.compositor.yml up
+docker-compose -f examples/docker-compose.compositor.example.yml up
 ```
 
 Configuration notes:
@@ -296,6 +296,16 @@ Scaling & alternatives:
 - To add more sources, add more `page-stream` services (page3, page4...) and extend the FFmpeg `-i ...` arguments and `filter_complex` to tile them (use `hstack`/`vstack` or `xstack` for >2 inputs). For example, `xstack=inputs=4:layout=0_0|w0_0|0_h0|w0_h0`.
 - If you prefer lower latency and fewer ffmpeg CPU transcodes, consider using the compositor to remux rather than re-encode (if inputs already match output codec/bitrate/profile) — this is more advanced and requires input coordination.
 - Another option is a single composite HTML (one `page-stream`) that uses iframes; that's the simplest approach but limited by cross-origin restrictions if you need to inject into each source.
+
+Single-service example (docker-compose)
+
+An example single-service compose (the `orfe-scenic` run you may use) is available at:
+
+```
+examples/docker-compose.orfe-scenic.example.yml
+```
+
+Copy and edit the example to suit your environment, then run with `docker-compose -f <file> up`.
 
 Troubleshooting
 - If one of the page-stream sources fails to connect, the compositor will show dropped frames or black areas until the source reconnects. Start the compositor after sources (or use supervision scripts) for a cleaner startup.

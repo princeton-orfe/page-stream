@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  orfe-scenic:
+    image: page-stream:latest
+    container_name: page0
+    restart: unless-stopped
+    environment:
+      - WIDTH=1920
+      - HEIGHT=1144 # Adjustment for 1080p video with browser chrome
+    volumes:
+      - ./custom.js:/custom.js
+      - ./custom.css:/custom.css
+    command: >
+      --ingest srt://page-stream:7045?streamid=page0
+      --url "https://example.com/page0"
+      --auto-refresh-seconds 1800
+      --inject-css /custom.css
+      --inject-js /custom.js
+      --crop-infobar 64
+    networks:
+      - default
+
+networks:
+  default:
+    driver: bridge
