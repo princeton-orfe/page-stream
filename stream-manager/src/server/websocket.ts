@@ -379,3 +379,32 @@ export function closeWebSocketServer(): Promise<void> {
     });
   });
 }
+
+/**
+ * Broadcast a status change for a specific container to all connected clients.
+ * Called by control routes after start/stop/restart/refresh actions.
+ */
+export async function broadcastContainerStatusChange(containerId: string): Promise<void> {
+  if (!serverState) return;
+
+  try {
+    // Fetch the latest container info
+    const container = await getContainer(containerId);
+    if (!container) return;
+
+    // Broadcast to all clients with streams:list capability
+    serverState.wss.clients.forEach((client) => {
+      const socket = client as AuthenticatedSocket;
+      if (socket.readyState === WebSocket.OPEN && socket.ctx?.hasCapability('streams:list')) {
+        // Send status update
+        sendMessage(socket, {
+          type: 'stream:status',
+          id: containerId,
+          data: { status: container.status, health: container.health }
+        });
+      }
+    });
+  } catch (err) {
+    console.error('[WebSocket] Error broadcasting status change:', err);
+  }
+}

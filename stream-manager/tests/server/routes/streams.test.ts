@@ -10,7 +10,11 @@ import type { HealthStatus } from '../../../src/server/health-parser.js';
 vi.mock('../../../src/server/docker.js', () => ({
   listStreamContainers: vi.fn(),
   getContainer: vi.fn(),
-  getRecentLogs: vi.fn()
+  getRecentLogs: vi.fn(),
+  startContainer: vi.fn(),
+  stopContainer: vi.fn(),
+  restartContainer: vi.fn(),
+  refreshContainer: vi.fn()
 }));
 
 // Mock the health-parser module
@@ -19,8 +23,15 @@ vi.mock('../../../src/server/health-parser.js', () => ({
   extractHealthHistory: vi.fn()
 }));
 
+// Mock the audit module
+vi.mock('../../../src/server/db/audit.js', () => ({
+  logAuditEvent: vi.fn()
+}));
+
 import * as docker from '../../../src/server/docker.js';
 import * as healthParser from '../../../src/server/health-parser.js';
+import { logAuditEvent } from '../../../src/server/db/audit.js';
+import { clearRateLimits } from '../../../src/server/routes/streams.js';
 
 // Helper to create mock request context
 function createMockContext(capabilities: Capability[]): RequestContext {
@@ -74,6 +85,7 @@ describe('Streams Routes', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    clearRateLimits(); // Clear rate limits between tests
   });
 
   afterEach(() => {
@@ -337,6 +349,421 @@ describe('Streams Routes', () => {
 
       expect(response.status).toBe(500);
       expect(response.body.error).toBe('Internal server error');
+    });
+  });
+
+  // ============================================================================
+  // Control Routes Tests (Phase 2)
+  // ============================================================================
+
+  describe('POST /api/streams/:id/start', () => {
+    const stoppedContainer: StreamContainer = {
+      ...mockContainer,
+      status: 'stopped'
+    };
+
+    it('should start a stopped container with streams:start capability', async () => {
+      const ctx = createMockContext(['streams:start']);
+      vi.mocked(docker.getContainer).mockResolvedValue(stoppedContainer);
+      vi.mocked(docker.startContainer).mockResolvedValue(undefined);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/start');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Container started');
+      expect(docker.startContainer).toHaveBeenCalledWith('abc123');
+      expect(logAuditEvent).toHaveBeenCalledWith(
+        ctx.user,
+        'stream:start',
+        expect.objectContaining({
+          resourceType: 'stream',
+          resourceId: 'abc123'
+        })
+      );
+    });
+
+    it('should return 403 without streams:start capability', async () => {
+      const ctx = createMockContext(['streams:read']);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/start');
+
+      expect(response.status).toBe(403);
+      expect(response.body.missing).toContain('streams:start');
+    });
+
+    it('should return 404 for non-existent container', async () => {
+      const ctx = createMockContext(['streams:start']);
+      vi.mocked(docker.getContainer).mockResolvedValue(null);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/nonexistent/start');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Stream not found');
+    });
+
+    it('should return 400 when container is already running', async () => {
+      const ctx = createMockContext(['streams:start']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer); // Already running
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/start');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Container is already running');
+    });
+
+    it('should return 429 when rate limited', async () => {
+      const ctx = createMockContext(['streams:start']);
+      vi.mocked(docker.getContainer).mockResolvedValue(stoppedContainer);
+      vi.mocked(docker.startContainer).mockResolvedValue(undefined);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      // First request should succeed
+      const response1 = await request(app).post('/api/streams/abc123/start');
+      expect(response1.status).toBe(200);
+
+      // Reset container state for second request
+      vi.mocked(docker.getContainer).mockResolvedValue(stoppedContainer);
+
+      // Second request within 5 seconds should be rate limited
+      const response2 = await request(app).post('/api/streams/abc123/start');
+      expect(response2.status).toBe(429);
+      expect(response2.body.error).toBe('Rate limited');
+      expect(response2.body.retryAfter).toBeGreaterThan(0);
+    });
+  });
+
+  describe('POST /api/streams/:id/stop', () => {
+    it('should stop a running container with streams:stop capability', async () => {
+      const ctx = createMockContext(['streams:stop']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer); // Running
+      vi.mocked(docker.stopContainer).mockResolvedValue(undefined);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/stop');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Container stopped');
+      expect(docker.stopContainer).toHaveBeenCalledWith('abc123', undefined);
+    });
+
+    it('should accept optional timeout parameter', async () => {
+      const ctx = createMockContext(['streams:stop']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.stopContainer).mockResolvedValue(undefined);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app)
+        .post('/api/streams/abc123/stop')
+        .send({ timeout: 60 });
+
+      expect(response.status).toBe(200);
+      expect(docker.stopContainer).toHaveBeenCalledWith('abc123', 60);
+    });
+
+    it('should return 403 without streams:stop capability', async () => {
+      const ctx = createMockContext(['streams:read']);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/stop');
+
+      expect(response.status).toBe(403);
+      expect(response.body.missing).toContain('streams:stop');
+    });
+
+    it('should return 400 when container is not running', async () => {
+      const ctx = createMockContext(['streams:stop']);
+      vi.mocked(docker.getContainer).mockResolvedValue({ ...mockContainer, status: 'stopped' });
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/stop');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Container is not running');
+    });
+  });
+
+  describe('POST /api/streams/:id/restart', () => {
+    it('should restart a container with streams:restart capability', async () => {
+      const ctx = createMockContext(['streams:restart']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.restartContainer).mockResolvedValue(undefined);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/restart');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Container restarted');
+      expect(docker.restartContainer).toHaveBeenCalledWith('abc123', undefined);
+    });
+
+    it('should accept optional timeout parameter', async () => {
+      const ctx = createMockContext(['streams:restart']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.restartContainer).mockResolvedValue(undefined);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app)
+        .post('/api/streams/abc123/restart')
+        .send({ timeout: 45 });
+
+      expect(response.status).toBe(200);
+      expect(docker.restartContainer).toHaveBeenCalledWith('abc123', 45);
+    });
+
+    it('should return 403 without streams:restart capability', async () => {
+      const ctx = createMockContext(['streams:read']);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/restart');
+
+      expect(response.status).toBe(403);
+      expect(response.body.missing).toContain('streams:restart');
+    });
+
+    it('should return 404 for non-existent container', async () => {
+      const ctx = createMockContext(['streams:restart']);
+      vi.mocked(docker.getContainer).mockResolvedValue(null);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/restart');
+
+      expect(response.status).toBe(404);
+      expect(response.body.error).toBe('Stream not found');
+    });
+  });
+
+  describe('POST /api/streams/:id/refresh', () => {
+    it('should refresh a running container with streams:refresh capability', async () => {
+      const ctx = createMockContext(['streams:refresh']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer); // Running
+      vi.mocked(docker.refreshContainer).mockResolvedValue({ method: 'fifo', success: true });
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/refresh');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(true);
+      expect(response.body.message).toBe('Container refreshed via fifo');
+      expect(response.body.method).toBe('fifo');
+      expect(docker.refreshContainer).toHaveBeenCalledWith('abc123');
+    });
+
+    it('should return signal fallback method in response', async () => {
+      const ctx = createMockContext(['streams:refresh']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.refreshContainer).mockResolvedValue({ method: 'signal', success: true });
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/refresh');
+
+      expect(response.status).toBe(200);
+      expect(response.body.method).toBe('signal');
+      expect(response.body.message).toBe('Container refreshed via signal');
+    });
+
+    it('should return 403 without streams:refresh capability', async () => {
+      const ctx = createMockContext(['streams:read']);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/refresh');
+
+      expect(response.status).toBe(403);
+      expect(response.body.missing).toContain('streams:refresh');
+    });
+
+    it('should return 400 when container is not running', async () => {
+      const ctx = createMockContext(['streams:refresh']);
+      vi.mocked(docker.getContainer).mockResolvedValue({ ...mockContainer, status: 'stopped' });
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/refresh');
+
+      expect(response.status).toBe(400);
+      expect(response.body.error).toBe('Container must be running to refresh');
+    });
+
+    it('should return failure message when refresh fails', async () => {
+      const ctx = createMockContext(['streams:refresh']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.refreshContainer).mockResolvedValue({ method: 'signal', success: false });
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      const response = await request(app).post('/api/streams/abc123/refresh');
+
+      expect(response.status).toBe(200);
+      expect(response.body.success).toBe(false);
+      expect(response.body.message).toBe('Refresh failed');
+    });
+  });
+
+  describe('Rate Limiting', () => {
+    it('should rate limit different actions on same container', async () => {
+      const ctx = createMockContext(['streams:restart', 'streams:refresh']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.restartContainer).mockResolvedValue(undefined);
+      vi.mocked(docker.refreshContainer).mockResolvedValue({ method: 'fifo', success: true });
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      // First restart should succeed
+      const response1 = await request(app).post('/api/streams/abc123/restart');
+      expect(response1.status).toBe(200);
+
+      // Refresh on same container should be rate limited
+      const response2 = await request(app).post('/api/streams/abc123/refresh');
+      expect(response2.status).toBe(429);
+    });
+
+    it('should allow actions on different containers', async () => {
+      const ctx = createMockContext(['streams:refresh']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.refreshContainer).mockResolvedValue({ method: 'fifo', success: true });
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      // First refresh on container1
+      const response1 = await request(app).post('/api/streams/container1/refresh');
+      expect(response1.status).toBe(200);
+
+      // Refresh on different container should succeed
+      const response2 = await request(app).post('/api/streams/container2/refresh');
+      expect(response2.status).toBe(200);
+    });
+  });
+
+  describe('Audit Logging', () => {
+    it('should log audit event on successful action', async () => {
+      const ctx = createMockContext(['streams:restart']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.restartContainer).mockResolvedValue(undefined);
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+
+      await request(app).post('/api/streams/abc123/restart');
+
+      expect(logAuditEvent).toHaveBeenCalledWith(
+        ctx.user,
+        'stream:restart',
+        {
+          resourceType: 'stream',
+          resourceId: 'abc123',
+          details: { streamName: 'test-stream-1', timeout: undefined }
+        }
+      );
+    });
+
+    it('should log audit event with failure on Docker error', async () => {
+      const ctx = createMockContext(['streams:restart']);
+      vi.mocked(docker.getContainer).mockResolvedValue(mockContainer);
+      vi.mocked(docker.restartContainer).mockRejectedValue(new Error('Docker daemon error'));
+
+      app = express();
+      app.use(express.json());
+      app.use(injectContext(ctx));
+      app.use('/api/streams', streamsRouter);
+      // Add error handler
+      app.use((err: Error, _req: express.Request, res: express.Response, _next: express.NextFunction) => {
+        res.status(500).json({ error: 'Internal server error', message: err.message });
+      });
+
+      await request(app).post('/api/streams/abc123/restart');
+
+      expect(logAuditEvent).toHaveBeenCalledWith(
+        ctx.user,
+        'stream:restart',
+        expect.objectContaining({
+          result: 'failure',
+          error: 'Docker daemon error'
+        })
+      );
     });
   });
 });

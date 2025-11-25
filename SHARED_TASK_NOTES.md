@@ -2,32 +2,32 @@
 
 ## Current Status
 **Phase 1 (Read-Only Dashboard)**: COMPLETE
-**Phase 2 (Control Actions)**: IN PROGRESS - Step 2.1 complete
+**Phase 2 (Control Actions)**: IN PROGRESS - Steps 2.1 and 2.2 complete
 
 ## Completed in This Iteration
-- **Step 2.1**: Docker control functions added to `src/server/docker.ts`:
-  - `startContainer(id)` - Start a stopped container
-  - `stopContainer(id, timeout?)` - Stop with graceful shutdown (default 30s)
-  - `restartContainer(id, timeout?)` - Restart container
-  - `signalContainer(id, signal)` - Send signal (e.g., SIGHUP)
-  - `execInContainer(id, cmd[])` - Execute command, returns stdout/stderr/exitCode
-  - `refreshContainer(id)` - FIFO write with SIGHUP fallback
-  - All functions verify container is managed (page-stream image or label)
-  - Improved retry logic: only retries on transient connection errors
+- **Step 2.2**: Control API routes added to `src/server/routes/streams.ts`:
+  - `POST /api/streams/:id/start` - Start a stopped container
+  - `POST /api/streams/:id/stop` - Stop a running container (accepts optional `timeout`)
+  - `POST /api/streams/:id/restart` - Restart a container (accepts optional `timeout`)
+  - `POST /api/streams/:id/refresh` - Refresh via FIFO or SIGHUP fallback
+  - All routes enforce capability requirements (`streams:start`, `streams:stop`, etc.)
+  - Rate limiting: max 1 control action per container per 5 seconds (429 response)
+  - Audit logging via `logAuditEvent()` on success and failure
+  - WebSocket broadcast via `broadcastContainerStatusChange()` after actions
+  - 38 tests added covering all routes, rate limiting, and audit logging
 
 ## Next Steps
 **Phase 2 (Control Actions)** - continue with:
-1. **Step 2.2**: Control API routes with capability enforcement
-2. **Step 2.3**: Frontend control buttons and actions
-3. **Step 2.4**: (Merged into 2.1 - refreshContainer already implemented)
-4. **Step 2.5**: Audit logging for control actions
+1. **Step 2.3**: Frontend control buttons and actions (StreamCard.tsx, StreamDetail.tsx)
+2. **Step 2.4**: Bulk actions API (optional, could skip for MVP)
+3. **Step 2.5**: Additional audit logging features (query API for audit log)
 
 ## How to Run
 ```bash
 cd stream-manager
 
 # Development
-npm test           # Run all tests (204 passing)
+npm test           # Run all tests (226 passing)
 npm run typecheck  # TypeScript check
 npm run dev        # Start backend server (port 3001)
 npm run dev:client # Start Vite dev server (port 3000)
@@ -47,3 +47,4 @@ docker-compose up -d
 - **Database**: SQLite with WAL mode at `/data/stream-manager.db`
 - **Container Detection**: Filters by image name containing `page-stream` OR label `com.page-stream.managed=true`
 - **Retry Logic**: Only retries on connection errors (ECONNREFUSED, ENOTFOUND), not on application errors
+- **Rate Limiting**: In-memory Map per container, 5 second cooldown between actions

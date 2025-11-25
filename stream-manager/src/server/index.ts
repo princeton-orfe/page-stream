@@ -9,8 +9,9 @@ import { createAuthMiddleware, RoleStore } from './auth/middleware.js';
 import { DEFAULT_AUTH_CONFIG } from './auth/extractors.js';
 import { AuthConfig } from './auth/types.js';
 import { createRoleStore, recordUserSeen } from './db/users.js';
-import { createWebSocketServer, closeWebSocketServer } from './websocket.js';
+import { createWebSocketServer, closeWebSocketServer, broadcastContainerStatusChange } from './websocket.js';
 import { streamsRouter, authRouter } from './routes/index.js';
+import { setBroadcastCallback } from './routes/streams.js';
 
 // Load config from environment
 function loadAuthConfig(): AuthConfig {
@@ -86,6 +87,9 @@ export async function createApp(roleStore?: RoleStore) {
 
   // WebSocket
   createWebSocketServer(server, authConfig, store);
+
+  // Wire up broadcast callback for control routes
+  setBroadcastCallback(broadcastContainerStatusChange);
 
   return { app, server, authConfig };
 }
