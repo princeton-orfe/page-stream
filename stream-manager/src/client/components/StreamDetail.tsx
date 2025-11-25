@@ -1,9 +1,11 @@
-import React, { useEffect, useMemo } from 'react';
+import React, { useEffect, useMemo, useState } from 'react';
 import { StreamContainer, HealthStatus } from '../types';
 import { HealthIndicator } from './HealthIndicator';
 import { LogViewer } from './LogViewer';
 import { CapabilityGate } from './CapabilityGate';
+import { ConfirmDialog } from './ConfirmDialog';
 import { useStream, useHealthHistory } from '../hooks/useStreams';
+import { useStreamControl } from '../hooks/useStreamControl';
 
 interface Props {
   streamId: string;
@@ -24,6 +26,18 @@ export function StreamDetail({
 }: Props) {
   const { data, isLoading, error } = useStream(streamId);
   const { data: historyData } = useHealthHistory(streamId);
+  const {
+    start,
+    stop,
+    restart,
+    refresh,
+    isPending,
+    pendingAction,
+    error: controlError,
+    reset: resetControlError
+  } = useStreamControl(streamId);
+
+  const [showStopConfirm, setShowStopConfirm] = useState(false);
 
   // Subscribe to logs when component mounts
   useEffect(() => {
@@ -143,11 +157,80 @@ export function StreamDetail({
           <div className="stream-control-section">
             <h3>Controls</h3>
             <div className="control-buttons">
-              {/* Placeholder for control buttons - Phase 2 */}
-              <p className="hint">Stream controls coming in Phase 2</p>
+              {stream.status === 'running' ? (
+                <>
+                  <CapabilityGate require="streams:stop">
+                    <button
+                      className="btn btn-danger"
+                      onClick={() => {
+                        resetControlError();
+                        setShowStopConfirm(true);
+                      }}
+                      disabled={isPending}
+                    >
+                      {pendingAction === 'stop' ? 'Stopping...' : 'Stop'}
+                    </button>
+                  </CapabilityGate>
+                  <CapabilityGate require="streams:restart">
+                    <button
+                      className="btn btn-warning"
+                      onClick={() => {
+                        resetControlError();
+                        restart();
+                      }}
+                      disabled={isPending}
+                    >
+                      {pendingAction === 'restart' ? 'Restarting...' : 'Restart'}
+                    </button>
+                  </CapabilityGate>
+                  <CapabilityGate require="streams:refresh">
+                    <button
+                      className="btn btn-secondary"
+                      onClick={() => {
+                        resetControlError();
+                        refresh();
+                      }}
+                      disabled={isPending}
+                    >
+                      {pendingAction === 'refresh' ? 'Refreshing...' : 'Refresh'}
+                    </button>
+                  </CapabilityGate>
+                </>
+              ) : (
+                <CapabilityGate require="streams:start">
+                  <button
+                    className="btn btn-primary"
+                    onClick={() => {
+                      resetControlError();
+                      start();
+                    }}
+                    disabled={isPending}
+                  >
+                    {pendingAction === 'start' ? 'Starting...' : 'Start'}
+                  </button>
+                </CapabilityGate>
+              )}
             </div>
+            {controlError && (
+              <div className="control-error">
+                {controlError.message}
+              </div>
+            )}
           </div>
         </CapabilityGate>
+
+        <ConfirmDialog
+          isOpen={showStopConfirm}
+          title="Stop Stream"
+          message={`Are you sure you want to stop "${stream.name.replace(/^\//, '')}"? The stream will stop broadcasting immediately.`}
+          confirmLabel="Stop"
+          variant="danger"
+          onConfirm={() => {
+            setShowStopConfirm(false);
+            stop();
+          }}
+          onCancel={() => setShowStopConfirm(false)}
+        />
 
         {historyData && historyData.history.length > 0 && (
           <div className="health-history-section">

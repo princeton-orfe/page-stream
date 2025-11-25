@@ -9,6 +9,7 @@ import { HealthIndicator } from '../../src/client/components/HealthIndicator';
 import { StreamCard } from '../../src/client/components/StreamCard';
 import { LogViewer } from '../../src/client/components/LogViewer';
 import { Dashboard } from '../../src/client/components/Dashboard';
+import { ConfirmDialog } from '../../src/client/components/ConfirmDialog';
 import { StreamContainer, HealthStatus } from '../../src/client/types';
 
 // Mock fetch for auth tests
@@ -97,6 +98,15 @@ describe('HealthIndicator', () => {
   });
 });
 
+// Wrapper for components needing QueryClient only (no auth)
+function QueryWrapper({ children }: { children: React.ReactNode }) {
+  return (
+    <QueryClientProvider client={createQueryClient()}>
+      {children}
+    </QueryClientProvider>
+  );
+}
+
 describe('StreamCard', () => {
   const mockStream: StreamContainer = {
     id: 'container123',
@@ -113,18 +123,18 @@ describe('StreamCard', () => {
   };
 
   it('renders stream name without leading slash', () => {
-    render(<StreamCard stream={mockStream} />);
+    render(<QueryWrapper><StreamCard stream={mockStream} /></QueryWrapper>);
     expect(screen.getByText('test-stream')).toBeInTheDocument();
   });
 
   it('renders status badge with correct class', () => {
-    render(<StreamCard stream={mockStream} />);
+    render(<QueryWrapper><StreamCard stream={mockStream} /></QueryWrapper>);
     const badge = screen.getByText('running');
     expect(badge).toHaveClass('status-badge', 'running');
   });
 
   it('shows resolution from labels', () => {
-    render(<StreamCard stream={mockStream} />);
+    render(<QueryWrapper><StreamCard stream={mockStream} /></QueryWrapper>);
     expect(screen.getByText('1920x1080')).toBeInTheDocument();
   });
 
@@ -135,14 +145,14 @@ describe('StreamCard', () => {
         'com.page-stream.ingest': 'srt://very-long-hostname.example.com:9000?passphrase=secret'
       }
     };
-    render(<StreamCard stream={streamWithLongUrl} />);
+    render(<QueryWrapper><StreamCard stream={streamWithLongUrl} /></QueryWrapper>);
     const truncatedText = screen.getByText(/srt:\/\/very-long-hostname/);
     expect(truncatedText.textContent).toContain('...');
   });
 
   it('calls onClick when card is clicked', () => {
     const onClick = vi.fn();
-    render(<StreamCard stream={mockStream} onClick={onClick} />);
+    render(<QueryWrapper><StreamCard stream={mockStream} onClick={onClick} /></QueryWrapper>);
     fireEvent.click(screen.getByRole('button'));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
@@ -158,8 +168,59 @@ describe('StreamCard', () => {
       retrying: false,
       infobarDismissTried: false
     };
-    render(<StreamCard stream={mockStream} healthStatus={healthStatus} />);
+    render(<QueryWrapper><StreamCard stream={mockStream} healthStatus={healthStatus} /></QueryWrapper>);
     expect(screen.getByText('1h 1m')).toBeInTheDocument();
+  });
+
+  it('shows stop button for running streams when user has capability', () => {
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read', 'streams:stop', 'streams:start'].includes(cap)
+    );
+    mockAuthContext.hasAnyCapability.mockImplementation(
+      (...caps: string[]) => caps.some(c => ['streams:list', 'streams:read', 'streams:stop', 'streams:start'].includes(c))
+    );
+
+    render(<QueryWrapper><StreamCard stream={mockStream} /></QueryWrapper>);
+    expect(screen.getByText('Stop')).toBeInTheDocument();
+  });
+
+  it('shows start button for stopped streams when user has capability', () => {
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read', 'streams:stop', 'streams:start'].includes(cap)
+    );
+    mockAuthContext.hasAnyCapability.mockImplementation(
+      (...caps: string[]) => caps.some(c => ['streams:list', 'streams:read', 'streams:stop', 'streams:start'].includes(c))
+    );
+
+    const stoppedStream = { ...mockStream, status: 'stopped' as const };
+    render(<QueryWrapper><StreamCard stream={stoppedStream} /></QueryWrapper>);
+    expect(screen.getByText('Start')).toBeInTheDocument();
+  });
+
+  it('shows refresh button for running streams when user has capability', () => {
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read', 'streams:stop', 'streams:start', 'streams:refresh'].includes(cap)
+    );
+    mockAuthContext.hasAnyCapability.mockImplementation(
+      (...caps: string[]) => caps.some(c => ['streams:list', 'streams:read', 'streams:stop', 'streams:start', 'streams:refresh'].includes(c))
+    );
+
+    render(<QueryWrapper><StreamCard stream={mockStream} /></QueryWrapper>);
+    expect(screen.getByText('Refresh')).toBeInTheDocument();
+  });
+
+  it('hides control buttons when user lacks capabilities', () => {
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read'].includes(cap)
+    );
+    mockAuthContext.hasAnyCapability.mockImplementation(
+      (...caps: string[]) => caps.some(c => ['streams:list', 'streams:read'].includes(c))
+    );
+
+    render(<QueryWrapper><StreamCard stream={mockStream} /></QueryWrapper>);
+    expect(screen.queryByText('Stop')).not.toBeInTheDocument();
+    expect(screen.queryByText('Start')).not.toBeInTheDocument();
+    expect(screen.queryByText('Refresh')).not.toBeInTheDocument();
   });
 });
 
@@ -268,28 +329,32 @@ describe('Dashboard', () => {
 
   it('renders loading state when loading with no streams', () => {
     render(
-      <Dashboard
-        streams={[]}
-        healthStatuses={new Map()}
-        loading={true}
-        error={null}
-        connected={false}
-        lastUpdated={null}
-      />
+      <QueryWrapper>
+        <Dashboard
+          streams={[]}
+          healthStatuses={new Map()}
+          loading={true}
+          error={null}
+          connected={false}
+          lastUpdated={null}
+        />
+      </QueryWrapper>
     );
     expect(screen.getByText('Loading streams...')).toBeInTheDocument();
   });
 
   it('renders error state when error with no streams', () => {
     render(
-      <Dashboard
-        streams={[]}
-        healthStatuses={new Map()}
-        loading={false}
-        error="Connection failed"
-        connected={false}
-        lastUpdated={null}
-      />
+      <QueryWrapper>
+        <Dashboard
+          streams={[]}
+          healthStatuses={new Map()}
+          loading={false}
+          error="Connection failed"
+          connected={false}
+          lastUpdated={null}
+        />
+      </QueryWrapper>
     );
     expect(screen.getByText('Error')).toBeInTheDocument();
     expect(screen.getByText('Connection failed')).toBeInTheDocument();
@@ -297,28 +362,32 @@ describe('Dashboard', () => {
 
   it('renders empty state when no streams found', () => {
     render(
-      <Dashboard
-        streams={[]}
-        healthStatuses={new Map()}
-        loading={false}
-        error={null}
-        connected={true}
-        lastUpdated={new Date().toISOString()}
-      />
+      <QueryWrapper>
+        <Dashboard
+          streams={[]}
+          healthStatuses={new Map()}
+          loading={false}
+          error={null}
+          connected={true}
+          lastUpdated={new Date().toISOString()}
+        />
+      </QueryWrapper>
     );
     expect(screen.getByText('No Streams Found')).toBeInTheDocument();
   });
 
   it('renders stream cards for each stream', () => {
     render(
-      <Dashboard
-        streams={mockStreams}
-        healthStatuses={new Map()}
-        loading={false}
-        error={null}
-        connected={true}
-        lastUpdated={new Date().toISOString()}
-      />
+      <QueryWrapper>
+        <Dashboard
+          streams={mockStreams}
+          healthStatuses={new Map()}
+          loading={false}
+          error={null}
+          connected={true}
+          lastUpdated={new Date().toISOString()}
+        />
+      </QueryWrapper>
     );
     expect(screen.getByText('stream-1')).toBeInTheDocument();
     expect(screen.getByText('stream-2')).toBeInTheDocument();
@@ -327,14 +396,16 @@ describe('Dashboard', () => {
 
   it('displays correct statistics', () => {
     render(
-      <Dashboard
-        streams={mockStreams}
-        healthStatuses={new Map()}
-        loading={false}
-        error={null}
-        connected={true}
-        lastUpdated={new Date().toISOString()}
-      />
+      <QueryWrapper>
+        <Dashboard
+          streams={mockStreams}
+          healthStatuses={new Map()}
+          loading={false}
+          error={null}
+          connected={true}
+          lastUpdated={new Date().toISOString()}
+        />
+      </QueryWrapper>
     );
     // Total: 3, Running: 2, Healthy: 1, Unhealthy: 1
     expect(screen.getByText('3')).toBeInTheDocument(); // Total
@@ -347,28 +418,32 @@ describe('Dashboard', () => {
 
   it('shows connected status indicator', () => {
     render(
-      <Dashboard
-        streams={mockStreams}
-        healthStatuses={new Map()}
-        loading={false}
-        error={null}
-        connected={true}
-        lastUpdated={new Date().toISOString()}
-      />
+      <QueryWrapper>
+        <Dashboard
+          streams={mockStreams}
+          healthStatuses={new Map()}
+          loading={false}
+          error={null}
+          connected={true}
+          lastUpdated={new Date().toISOString()}
+        />
+      </QueryWrapper>
     );
     expect(screen.getByText('Live')).toBeInTheDocument();
   });
 
   it('shows disconnected status indicator', () => {
     render(
-      <Dashboard
-        streams={mockStreams}
-        healthStatuses={new Map()}
-        loading={false}
-        error={null}
-        connected={false}
-        lastUpdated={new Date().toISOString()}
-      />
+      <QueryWrapper>
+        <Dashboard
+          streams={mockStreams}
+          healthStatuses={new Map()}
+          loading={false}
+          error={null}
+          connected={false}
+          lastUpdated={new Date().toISOString()}
+        />
+      </QueryWrapper>
     );
     expect(screen.getByText('Reconnecting...')).toBeInTheDocument();
   });
@@ -376,15 +451,17 @@ describe('Dashboard', () => {
   it('calls onStreamClick when stream card is clicked', () => {
     const onStreamClick = vi.fn();
     render(
-      <Dashboard
-        streams={mockStreams}
-        healthStatuses={new Map()}
-        loading={false}
-        error={null}
-        connected={true}
-        lastUpdated={new Date().toISOString()}
-        onStreamClick={onStreamClick}
-      />
+      <QueryWrapper>
+        <Dashboard
+          streams={mockStreams}
+          healthStatuses={new Map()}
+          loading={false}
+          error={null}
+          connected={true}
+          lastUpdated={new Date().toISOString()}
+          onStreamClick={onStreamClick}
+        />
+      </QueryWrapper>
     );
     fireEvent.click(screen.getByText('stream-1'));
     expect(onStreamClick).toHaveBeenCalledWith(mockStreams[0]);
@@ -459,5 +536,87 @@ describe('UserMenu', () => {
   it('shows Open Mode indicator for anonymous users', () => {
     render(<UserMenu />);
     expect(screen.getByText('(Open Mode)')).toBeInTheDocument();
+  });
+});
+
+describe('ConfirmDialog', () => {
+  const defaultProps = {
+    isOpen: true,
+    title: 'Confirm Action',
+    message: 'Are you sure you want to proceed?',
+    onConfirm: vi.fn(),
+    onCancel: vi.fn()
+  };
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('renders nothing when isOpen is false', () => {
+    const { container } = render(
+      <ConfirmDialog {...defaultProps} isOpen={false} />
+    );
+    expect(container.textContent).toBe('');
+  });
+
+  it('renders title and message when open', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    expect(screen.getByText('Confirm Action')).toBeInTheDocument();
+    expect(screen.getByText('Are you sure you want to proceed?')).toBeInTheDocument();
+  });
+
+  it('renders default button labels', () => {
+    render(<ConfirmDialog {...defaultProps} />);
+    expect(screen.getByText('Confirm')).toBeInTheDocument();
+    expect(screen.getByText('Cancel')).toBeInTheDocument();
+  });
+
+  it('renders custom button labels', () => {
+    render(
+      <ConfirmDialog {...defaultProps} confirmLabel="Delete" cancelLabel="Go Back" />
+    );
+    expect(screen.getByText('Delete')).toBeInTheDocument();
+    expect(screen.getByText('Go Back')).toBeInTheDocument();
+  });
+
+  it('calls onConfirm when confirm button is clicked', () => {
+    const onConfirm = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onConfirm={onConfirm} />);
+    fireEvent.click(screen.getByText('Confirm'));
+    expect(onConfirm).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onCancel when cancel button is clicked', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onCancel={onCancel} />);
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('calls onCancel when backdrop is clicked', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onCancel={onCancel} />);
+    fireEvent.click(screen.getByRole('dialog').parentElement!);
+    expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not call onCancel when dialog content is clicked', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onCancel={onCancel} />);
+    fireEvent.click(screen.getByRole('dialog'));
+    expect(onCancel).not.toHaveBeenCalled();
+  });
+
+  it('applies danger variant to confirm button', () => {
+    render(<ConfirmDialog {...defaultProps} variant="danger" />);
+    const confirmBtn = screen.getByText('Confirm');
+    expect(confirmBtn).toHaveClass('btn-danger');
+  });
+
+  it('calls onCancel when Escape key is pressed', () => {
+    const onCancel = vi.fn();
+    render(<ConfirmDialog {...defaultProps} onCancel={onCancel} />);
+    fireEvent.keyDown(document, { key: 'Escape' });
+    expect(onCancel).toHaveBeenCalledTimes(1);
   });
 });
