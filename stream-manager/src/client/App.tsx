@@ -4,7 +4,10 @@ import { AuthProvider } from './contexts/AuthContext';
 import { UserMenu } from './components/UserMenu';
 import { Dashboard } from './components/Dashboard';
 import { StreamDetail } from './components/StreamDetail';
+import { AuditLog } from './components/AuditLog';
+import { CapabilityGate } from './components/CapabilityGate';
 import { useWebSocket } from './hooks/useWebSocket';
+import { useAuth } from './hooks/useAuth';
 import { StreamContainer } from './types';
 
 const queryClient = new QueryClient({
@@ -16,9 +19,13 @@ const queryClient = new QueryClient({
   }
 });
 
+type View = 'dashboard' | 'stream' | 'audit';
+
 function AppContent() {
+  const [view, setView] = useState<View>('dashboard');
   const [selectedStream, setSelectedStream] = useState<StreamContainer | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
+  const { hasCapability } = useAuth();
 
   const {
     connected,
@@ -34,10 +41,16 @@ function AppContent() {
 
   const handleStreamClick = useCallback((stream: StreamContainer) => {
     setSelectedStream(stream);
+    setView('stream');
   }, []);
 
   const handleBack = useCallback(() => {
     setSelectedStream(null);
+    setView('dashboard');
+  }, []);
+
+  const handleAuditClick = useCallback(() => {
+    setView('audit');
   }, []);
 
   const handleSubscribe = useCallback(() => {
@@ -52,14 +65,10 @@ function AppContent() {
     }
   }, [selectedStream, unsubscribeLogs]);
 
-  return (
-    <div className="app">
-      <header className="header">
-        <h1>Stream Manager</h1>
-        <UserMenu />
-      </header>
-      <main className="main">
-        {selectedStream ? (
+  const renderContent = () => {
+    switch (view) {
+      case 'stream':
+        return selectedStream ? (
           <StreamDetail
             streamId={selectedStream.id}
             wsLogs={logs.get(selectedStream.id)}
@@ -68,7 +77,11 @@ function AppContent() {
             onUnsubscribe={handleUnsubscribe}
             onBack={handleBack}
           />
-        ) : (
+        ) : null;
+      case 'audit':
+        return <AuditLog onBack={handleBack} />;
+      default:
+        return (
           <Dashboard
             streams={streams}
             healthStatuses={healthStatuses}
@@ -78,7 +91,28 @@ function AppContent() {
             lastUpdated={lastUpdated}
             onStreamClick={handleStreamClick}
           />
-        )}
+        );
+    }
+  };
+
+  return (
+    <div className="app">
+      <header className="header">
+        <h1 onClick={() => setView('dashboard')} style={{ cursor: 'pointer' }}>Stream Manager</h1>
+        <nav className="nav">
+          <CapabilityGate require="audit:read">
+            <button
+              className={`nav-button ${view === 'audit' ? 'active' : ''}`}
+              onClick={handleAuditClick}
+            >
+              Audit Log
+            </button>
+          </CapabilityGate>
+        </nav>
+        <UserMenu />
+      </header>
+      <main className="main">
+        {renderContent()}
       </main>
     </div>
   );

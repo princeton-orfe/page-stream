@@ -10,6 +10,7 @@ import { StreamCard } from '../../src/client/components/StreamCard';
 import { LogViewer } from '../../src/client/components/LogViewer';
 import { Dashboard } from '../../src/client/components/Dashboard';
 import { ConfirmDialog } from '../../src/client/components/ConfirmDialog';
+import { AuditLog } from '../../src/client/components/AuditLog';
 import { StreamContainer, HealthStatus } from '../../src/client/types';
 
 // Mock fetch for auth tests
@@ -618,5 +619,222 @@ describe('ConfirmDialog', () => {
     render(<ConfirmDialog {...defaultProps} onCancel={onCancel} />);
     fireEvent.keyDown(document, { key: 'Escape' });
     expect(onCancel).toHaveBeenCalledTimes(1);
+  });
+});
+
+// Mock useAuditLog and useAuditActions hooks
+const mockUseAuditLog = vi.fn();
+const mockUseAuditActions = vi.fn();
+
+vi.mock('../../src/client/hooks/useAuditLog', () => ({
+  useAuditLog: () => mockUseAuditLog(),
+  useAuditActions: () => mockUseAuditActions(),
+  getExportUrl: () => '/api/audit/export'
+}));
+
+describe('AuditLog', () => {
+  const mockOnBack = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseAuditActions.mockReturnValue({
+      data: { actions: ['stream:start', 'stream:stop', 'stream:restart'] },
+      isLoading: false
+    });
+    // Prevent window.open calls
+    vi.spyOn(window, 'open').mockImplementation(() => null);
+  });
+
+  it('renders loading state', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+    expect(screen.getByText('Loading audit log...')).toBeInTheDocument();
+  });
+
+  it('renders error state', () => {
+    const refetch = vi.fn();
+    mockUseAuditLog.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('Failed to fetch'),
+      refetch
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+    expect(screen.getByText(/Error loading audit log.*Failed to fetch/)).toBeInTheDocument();
+
+    // Click retry button
+    fireEvent.click(screen.getByText('Retry'));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('renders empty state when no entries', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: { entries: [], total: 0, limit: 25, offset: 0, hasMore: false },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+    expect(screen.getByText('No Audit Entries')).toBeInTheDocument();
+  });
+
+  it('renders audit entries in table', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: {
+        entries: [
+          {
+            id: 1,
+            timestamp: '2024-01-15T10:30:00Z',
+            userId: 'user1',
+            username: 'Test User',
+            action: 'stream:start',
+            resourceType: 'stream',
+            resourceId: 'container-12345678',
+            result: 'success'
+          },
+          {
+            id: 2,
+            timestamp: '2024-01-15T10:35:00Z',
+            userId: 'user2',
+            username: 'Admin',
+            action: 'stream:stop',
+            resourceType: 'stream',
+            resourceId: 'container-87654321',
+            result: 'failure',
+            error: 'Container not found'
+          }
+        ],
+        total: 2,
+        limit: 25,
+        offset: 0,
+        hasMore: false
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+
+    // Check header
+    expect(screen.getByText('Audit Log')).toBeInTheDocument();
+
+    // Check summary
+    expect(screen.getByText('Showing 2 of 2 entries')).toBeInTheDocument();
+
+    // Check table has data by verifying entries
+    expect(screen.getByText('Test User')).toBeInTheDocument();
+    expect(screen.getByText('Admin')).toBeInTheDocument();
+    // These appear in both the action dropdown options and the table, so use getAllByText
+    expect(screen.getAllByText('stream start').length).toBeGreaterThan(0);
+    expect(screen.getAllByText('stream stop').length).toBeGreaterThan(0);
+  });
+
+  it('calls onBack when back button is clicked', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: { entries: [], total: 0, limit: 25, offset: 0, hasMore: false },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+    fireEvent.click(screen.getByText('Back'));
+    expect(mockOnBack).toHaveBeenCalled();
+  });
+
+  it('renders filter controls', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: { entries: [], total: 0, limit: 25, offset: 0, hasMore: false },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+
+    // Check filters exist by testing input elements
+    expect(screen.getByLabelText('User ID')).toBeInTheDocument();
+    expect(screen.getByLabelText('Since')).toBeInTheDocument();
+
+    // Check action filter dropdown
+    const actionSelect = screen.getByRole('combobox');
+    expect(actionSelect).toBeInTheDocument();
+  });
+
+  it('opens export URL when export button is clicked', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: { entries: [], total: 0, limit: 25, offset: 0, hasMore: false },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+    fireEvent.click(screen.getByText('Export CSV'));
+    expect(window.open).toHaveBeenCalledWith('/api/audit/export', '_blank');
+  });
+
+  it('renders pagination when there are multiple pages', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: {
+        entries: Array(25).fill({
+          id: 1,
+          timestamp: '2024-01-15T10:30:00Z',
+          userId: 'user1',
+          username: 'Test User',
+          action: 'stream:start',
+          result: 'success'
+        }),
+        total: 50,
+        limit: 25,
+        offset: 0,
+        hasMore: true
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+
+    expect(screen.getByText('Page 1 of 2')).toBeInTheDocument();
+    expect(screen.getByText('Previous')).toBeDisabled();
+    expect(screen.getByText('Next')).not.toBeDisabled();
+  });
+
+  it('does not render pagination for single page', () => {
+    mockUseAuditLog.mockReturnValue({
+      data: {
+        entries: [{
+          id: 1,
+          timestamp: '2024-01-15T10:30:00Z',
+          userId: 'user1',
+          username: 'Test User',
+          action: 'stream:start',
+          result: 'success'
+        }],
+        total: 1,
+        limit: 25,
+        offset: 0,
+        hasMore: false
+      },
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><AuditLog onBack={mockOnBack} /></QueryWrapper>);
+
+    expect(screen.queryByText('Previous')).not.toBeInTheDocument();
+    expect(screen.queryByText('Next')).not.toBeInTheDocument();
   });
 });
