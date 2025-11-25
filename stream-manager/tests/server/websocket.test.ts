@@ -51,13 +51,20 @@ function createMockRoleStore(): RoleStore {
 async function connectAndWait(
   port: number,
   headers: Record<string, string> = {}
-): Promise<{ ws: WebSocket; message: ServerMessage }> {
+): Promise<{ ws: WebSocket; message: ServerMessage; messages: ServerMessage[] }> {
   return new Promise((resolve, reject) => {
     const ws = new WebSocket(`ws://localhost:${port}`, { headers });
+    const messages: ServerMessage[] = [];
+    let resolved = false;
 
     ws.on('message', (data) => {
       const message = JSON.parse(data.toString()) as ServerMessage;
-      resolve({ ws, message });
+      messages.push(message);
+      if (!resolved) {
+        resolved = true;
+        // Allow time for additional messages to queue up
+        setTimeout(() => resolve({ ws, message, messages }), 50);
+      }
     });
 
     ws.on('error', reject);
@@ -163,13 +170,16 @@ describe('WebSocket Server', () => {
       });
       port = (httpServer.address() as AddressInfo).port;
 
-      const { ws } = await connectAndWait(port);
+      const { ws, messages } = await connectAndWait(port);
 
-      // Wait for streams list
-      const streamsMsg = await waitForMessageType(ws, 'streams:list');
+      // Wait a bit more for additional messages
+      await new Promise((r) => setTimeout(r, 100));
 
-      expect(streamsMsg.type).toBe('streams:list');
-      if (streamsMsg.type === 'streams:list') {
+      // Find streams list in collected messages
+      const streamsMsg = messages.find(m => m.type === 'streams:list');
+
+      expect(streamsMsg).toBeDefined();
+      if (streamsMsg && streamsMsg.type === 'streams:list') {
         expect(Array.isArray(streamsMsg.data)).toBe(true);
         expect(streamsMsg.data.length).toBe(1);
         expect(streamsMsg.data[0].name).toBe('page-stream-test');
