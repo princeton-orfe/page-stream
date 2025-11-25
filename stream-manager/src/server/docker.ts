@@ -149,7 +149,7 @@ export async function getContainer(id: string): Promise<StreamContainer | null> 
         })
       };
     } catch (error) {
-      if ((error as NodeJS.ErrnoException).statusCode === 404) {
+      if ((error as { statusCode?: number }).statusCode === 404) {
         return null;
       }
       throw error;

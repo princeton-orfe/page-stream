@@ -89,7 +89,7 @@ export function resolveCapabilities(
     const role = allRoles.find(r => r.id === roleId);
     if (!role) continue;
 
-    if (role.capabilities.includes('*' as Capability)) {
+    if ((role.capabilities as string[]).includes('*')) {
       // Admin role: add all capabilities
       ALL_CAPABILITIES.forEach(cap => capabilities.add(cap));
     } else {
