@@ -32,13 +32,36 @@ export function getDocker(): Docker {
   return docker;
 }
 
+// For testing: reset module state
+export function resetDockerState(): void {
+  docker = null;
+  connectionRetries = 0;
+}
+
+// Check if an error should trigger retries (only retry transient errors)
+function isRetryableError(error: unknown): boolean {
+  const err = error as { statusCode?: number; code?: string; noRetry?: boolean };
+
+  // Don't retry if explicitly marked
+  if (err.noRetry) return false;
+
+  // Don't retry authorization errors (403) or not found (404)
+  if (err.statusCode === 403 || err.statusCode === 404) return false;
+
+  // Retry connection errors
+  if (err.code === 'ECONNREFUSED' || err.code === 'ENOTFOUND') return true;
+
+  // By default, don't retry to avoid long delays
+  return false;
+}
+
 async function withRetry<T>(operation: () => Promise<T>): Promise<T> {
   try {
     const result = await operation();
     connectionRetries = 0; // Reset on success
     return result;
   } catch (error) {
-    if (connectionRetries < MAX_RETRIES) {
+    if (isRetryableError(error) && connectionRetries < MAX_RETRIES) {
       connectionRetries++;
       const delay = RETRY_DELAY_BASE * Math.pow(2, connectionRetries - 1);
       await new Promise(resolve => setTimeout(resolve, delay));
@@ -248,5 +271,175 @@ export async function checkDockerConnection(): Promise<boolean> {
     return true;
   } catch {
     return false;
+  }
+}
+
+// ============================================================================
+// Control Functions (Phase 2)
+// ============================================================================
+
+export interface ExecResult {
+  stdout: string;
+  stderr: string;
+  exitCode: number;
+}
+
+/**
+ * Verify a container is a page-stream container and exists
+ * Throws if container not found or not managed
+ */
+async function verifyManagedContainer(id: string): Promise<Docker.Container> {
+  const docker = getDocker();
+  const container = docker.getContainer(id);
+
+  const info = await container.inspect();
+  const isManaged = info.Config.Image.includes('page-stream') ||
+    info.Config.Labels?.['com.page-stream.managed'] === 'true';
+
+  if (!isManaged) {
+    const error = new Error(`Container ${id} is not a managed page-stream container`);
+    (error as Error & { statusCode: number }).statusCode = 403;
+    throw error;
+  }
+
+  return container;
+}
+
+/**
+ * Start a stopped container
+ */
+export async function startContainer(id: string): Promise<void> {
+  return withRetry(async () => {
+    const container = await verifyManagedContainer(id);
+    await container.start();
+  });
+}
+
+/**
+ * Stop a running container (sends SIGTERM, waits for graceful shutdown)
+ * @param id Container ID or name
+ * @param timeout Seconds to wait before killing (default 30)
+ */
+export async function stopContainer(id: string, timeout: number = 30): Promise<void> {
+  return withRetry(async () => {
+    const container = await verifyManagedContainer(id);
+    await container.stop({ t: timeout });
+  });
+}
+
+/**
+ * Restart a container
+ * @param id Container ID or name
+ * @param timeout Seconds to wait for stop before killing (default 30)
+ */
+export async function restartContainer(id: string, timeout: number = 30): Promise<void> {
+  return withRetry(async () => {
+    const container = await verifyManagedContainer(id);
+    await container.restart({ t: timeout });
+  });
+}
+
+/**
+ * Send a signal to the main process in a container
+ * @param id Container ID or name
+ * @param signal Signal name (e.g., 'SIGHUP', 'SIGTERM')
+ */
+export async function signalContainer(id: string, signal: string): Promise<void> {
+  return withRetry(async () => {
+    const container = await verifyManagedContainer(id);
+    await container.kill({ signal });
+  });
+}
+
+/**
+ * Execute a command in a running container
+ * @param id Container ID or name
+ * @param cmd Command and arguments array
+ * @returns stdout, stderr, and exit code
+ */
+export async function execInContainer(id: string, cmd: string[]): Promise<ExecResult> {
+  return withRetry(async () => {
+    const container = await verifyManagedContainer(id);
+
+    const exec = await container.exec({
+      Cmd: cmd,
+      AttachStdout: true,
+      AttachStderr: true
+    });
+
+    const stream = await exec.start({ hijack: true, stdin: false });
+
+    return new Promise<ExecResult>((resolve, reject) => {
+      const stdout: Buffer[] = [];
+      const stderr: Buffer[] = [];
+
+      // Docker multiplexes stdout/stderr with an 8-byte header
+      let buffer = Buffer.alloc(0);
+
+      stream.on('data', (chunk: Buffer) => {
+        buffer = Buffer.concat([buffer, chunk]);
+
+        while (buffer.length >= 8) {
+          const streamType = buffer[0]; // 1 = stdout, 2 = stderr
+          const size = buffer.readUInt32BE(4);
+          const totalSize = 8 + size;
+
+          if (buffer.length < totalSize) break;
+
+          const data = buffer.slice(8, totalSize);
+          if (streamType === 1) {
+            stdout.push(data);
+          } else if (streamType === 2) {
+            stderr.push(data);
+          }
+
+          buffer = buffer.slice(totalSize);
+        }
+      });
+
+      stream.on('end', async () => {
+        try {
+          const execInfo = await exec.inspect();
+          resolve({
+            stdout: Buffer.concat(stdout).toString('utf8'),
+            stderr: Buffer.concat(stderr).toString('utf8'),
+            exitCode: execInfo.ExitCode ?? -1
+          });
+        } catch (err) {
+          reject(err);
+        }
+      });
+
+      stream.on('error', reject);
+    });
+  });
+}
+
+/**
+ * Refresh a page-stream container by writing to the FIFO
+ * Falls back to SIGHUP if FIFO refresh fails
+ * @param id Container ID or name
+ * @returns Result indicating which method was used
+ */
+export async function refreshContainer(id: string): Promise<{ method: 'fifo' | 'signal'; success: boolean }> {
+  // Try FIFO first (primary method)
+  try {
+    const result = await execInContainer(id, [
+      'sh', '-c', 'echo refresh > /tmp/page_refresh_fifo'
+    ]);
+
+    if (result.exitCode === 0) {
+      return { method: 'fifo', success: true };
+    }
+  } catch {
+    // FIFO failed, try signal fallback
+  }
+
+  // Fallback to SIGHUP
+  try {
+    await signalContainer(id, 'SIGHUP');
+    return { method: 'signal', success: true };
+  } catch {
+    return { method: 'signal', success: false };
   }
 }
