@@ -122,4 +122,60 @@ function runMigrations(db: Database.Database) {
 
     db.prepare('INSERT INTO migrations (name) VALUES (?)').run('004_audit_log');
   }
+
+  // Migration: stream_configs table
+  if (!appliedNames.includes('005_stream_configs')) {
+    db.exec(`
+      CREATE TABLE stream_configs (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        type TEXT NOT NULL DEFAULT 'standard',
+        enabled INTEGER NOT NULL DEFAULT 1,
+        url TEXT NOT NULL,
+        inject_css TEXT,
+        inject_js TEXT,
+        width INTEGER NOT NULL DEFAULT 1920,
+        height INTEGER NOT NULL DEFAULT 1080,
+        fps INTEGER NOT NULL DEFAULT 30,
+        crop_infobar INTEGER NOT NULL DEFAULT 0,
+        preset TEXT NOT NULL DEFAULT 'veryfast',
+        video_bitrate TEXT NOT NULL DEFAULT '2500k',
+        audio_bitrate TEXT NOT NULL DEFAULT '128k',
+        format TEXT NOT NULL DEFAULT 'mpegts',
+        ingest TEXT NOT NULL,
+        auto_refresh_seconds INTEGER NOT NULL DEFAULT 0,
+        reconnect_attempts INTEGER NOT NULL DEFAULT 0,
+        reconnect_initial_delay_ms INTEGER NOT NULL DEFAULT 1000,
+        reconnect_max_delay_ms INTEGER NOT NULL DEFAULT 30000,
+        health_interval_seconds INTEGER NOT NULL DEFAULT 30,
+        extra_ffmpeg_args TEXT,
+        input_ffmpeg_flags TEXT,
+        display TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT NOT NULL,
+        updated_by TEXT
+      );
+      CREATE INDEX idx_stream_configs_name ON stream_configs(name);
+      CREATE INDEX idx_stream_configs_type ON stream_configs(type);
+      CREATE INDEX idx_stream_configs_enabled ON stream_configs(enabled);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('005_stream_configs');
+  }
+
+  // Migration: display_assignments table for tracking X11 displays
+  if (!appliedNames.includes('006_display_assignments')) {
+    db.exec(`
+      CREATE TABLE display_assignments (
+        display TEXT PRIMARY KEY,
+        stream_id TEXT NOT NULL,
+        assigned_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (stream_id) REFERENCES stream_configs(id) ON DELETE CASCADE
+      );
+      CREATE INDEX idx_display_stream ON display_assignments(stream_id);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('006_display_assignments');
+  }
 }

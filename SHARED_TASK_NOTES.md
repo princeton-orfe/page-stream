@@ -3,29 +3,39 @@
 ## Current Status
 **Phase 1 (Read-Only Dashboard)**: COMPLETE
 **Phase 2 (Control Actions)**: COMPLETE
+**Phase 3 (CRUD Operations)**: IN PROGRESS (Steps 3.1-3.2 complete)
 
 ## Completed in This Iteration
-- **Step 2.5**: Audit Log Viewer implemented:
-  - Backend API (`src/server/routes/audit.ts`): GET /api/audit (with filters), GET /api/audit/actions, GET /api/audit/export (CSV)
-  - Frontend hook (`src/client/hooks/useAuditLog.ts`): useAuditLog, useAuditActions, getExportUrl
-  - Frontend component (`src/client/components/AuditLog.tsx`): Table with filters, pagination, export
-  - Navigation updated in App.tsx with capability-gated Audit Log button
-  - 24 new tests (15 backend + 9 frontend) - 264 total tests passing
+- **Step 3.1**: Stream configuration schema (`src/server/config/schema.ts`)
+  - StreamConfig interface with all fields (identity, content, display, encoding, output, behavior, advanced, metadata)
+  - Type definitions: StreamType, EncodingPreset, OutputFormat
+  - STREAM_CONFIG_DEFAULTS with sensible defaults
+  - validateStreamConfig() for full validation on create
+  - validatePartialStreamConfig() for partial validation on update
+  - StreamConfigValidationError with field/value details
+
+- **Step 3.2**: Configuration storage (`src/server/config/storage.ts`)
+  - CRUD: createStreamConfig, getStreamConfig, getStreamConfigByName, listStreamConfigs, updateStreamConfig, deleteStreamConfig
+  - duplicateStreamConfig for quick copying
+  - Display management: getNextAvailableDisplay, assignDisplay, releaseDisplay, getAssignedDisplay
+  - Import/Export: exportConfigs, importConfigs (with skipExisting/overwrite options)
+  - Database migrations: 005_stream_configs, 006_display_assignments
+
+- **Tests**: 88 new tests (47 schema + 41 storage) - 352 total tests passing
 
 ## Next Steps
-**Phase 3 (CRUD Operations)** - Start with:
-1. **Step 3.1**: Stream configuration schema
-2. **Step 3.2**: Template storage and API
-3. **Step 3.3**: Create stream from template UI
-
-Note: Step 2.4 (Bulk actions API) was skipped as optional for MVP.
+**Phase 3 (CRUD Operations)** - Continue with:
+1. **Step 3.3**: Container generation (convert StreamConfig → Docker container)
+2. **Step 3.4**: CRUD API routes with RBAC (POST/PUT/DELETE /api/streams)
+3. **Step 3.5**: Frontend - Stream form with capability gates
+4. **Step 3.6**: Templates system
 
 ## How to Run
 ```bash
 cd stream-manager
 
 # Development
-npm test           # Run all tests (264 passing)
+npm test           # Run all tests (352 passing)
 npm run typecheck  # TypeScript check
 npm run dev        # Start backend server (port 3001)
 npm run dev:client # Start Vite dev server (port 3000)
@@ -48,3 +58,4 @@ docker-compose up -d
 - **Rate Limiting**: In-memory Map per container, 5 second cooldown between actions
 - **Control Flow**: StreamCard uses simple Start/Stop toggle; StreamDetail has full controls with confirmation for Stop
 - **Audit Log**: Capability-gated (`audit:read`), supports filtering by action/user/date, CSV export up to 10,000 entries
+- **Stream Config**: Full validation with defaults, supports import/export JSON, X11 display auto-assignment from :99-:199
