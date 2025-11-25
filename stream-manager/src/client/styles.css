@@ -351,3 +351,251 @@ body {
   margin-bottom: 0.5rem;
   color: var(--text-secondary);
 }
+
+.empty-state .hint {
+  font-size: 0.875rem;
+  margin-top: 1rem;
+}
+
+/* Dashboard Header */
+.dashboard-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dashboard-meta {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.875rem;
+  color: var(--text-muted);
+}
+
+.connection-status {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.connection-status::before {
+  content: '';
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--error);
+}
+
+.connection-status.connected::before {
+  background: var(--success);
+  box-shadow: 0 0 6px var(--success);
+}
+
+.connection-status.disconnected {
+  color: var(--warning);
+}
+
+/* Stream Detail */
+.stream-detail {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.stream-detail-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.stream-detail-header h2 {
+  flex: 1;
+  font-size: 1.25rem;
+  font-weight: 600;
+}
+
+.stream-detail-content {
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+}
+
+.stream-info-section,
+.stream-control-section,
+.health-history-section,
+.stream-logs-section {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 0.5rem;
+  padding: 1rem;
+}
+
+.stream-info-section h3,
+.stream-control-section h3,
+.health-history-section h3,
+.stream-logs-section h3 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin-bottom: 1rem;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+}
+
+.info-grid {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.5rem 1rem;
+  font-size: 0.875rem;
+}
+
+.info-grid dt {
+  color: var(--text-muted);
+}
+
+.info-grid dd {
+  color: var(--text-primary);
+}
+
+.monospace {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+}
+
+.link {
+  color: var(--accent);
+  text-decoration: none;
+}
+
+.link:hover {
+  text-decoration: underline;
+}
+
+.hint {
+  color: var(--text-muted);
+  font-size: 0.875rem;
+}
+
+/* Health History */
+.health-history {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+}
+
+.history-entry {
+  display: flex;
+  gap: 1rem;
+  padding: 0.5rem;
+  background: var(--bg-secondary);
+  border-radius: 0.25rem;
+}
+
+.history-entry .timestamp {
+  color: var(--text-muted);
+  min-width: 80px;
+}
+
+.history-entry .uptime {
+  color: var(--text-secondary);
+  min-width: 80px;
+}
+
+.history-entry .restart-count {
+  color: var(--text-muted);
+}
+
+.history-entry .restart-count.has-restarts {
+  color: var(--warning);
+}
+
+/* Log Controls */
+.log-controls {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.log-filter {
+  background: var(--bg-primary);
+  border: 1px solid var(--border);
+  border-radius: 0.25rem;
+  padding: 0.375rem 0.75rem;
+  font-family: inherit;
+  font-size: 0.875rem;
+  color: var(--text-primary);
+  width: 200px;
+}
+
+.log-filter:focus {
+  outline: none;
+  border-color: var(--accent);
+}
+
+.log-filter::placeholder {
+  color: var(--text-muted);
+}
+
+.log-toggle {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.875rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.log-toggle input {
+  cursor: pointer;
+}
+
+.log-status {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.auto-scroll-indicator {
+  padding: 0.25rem 0.5rem;
+  border-radius: 0.25rem;
+  background: var(--bg-primary);
+}
+
+.auto-scroll-indicator.active {
+  color: var(--success);
+}
+
+.log-empty {
+  color: var(--text-muted);
+  text-align: center;
+  padding: 2rem;
+}
+
+/* Ingest URL */
+.ingest-url {
+  font-family: ui-monospace, SFMono-Regular, 'SF Mono', Menlo, Consolas, 'Liberation Mono', monospace;
+  font-size: 0.8125rem;
+}
+
+/* Stream Card Actions placeholder */
+.stream-card-actions {
+  margin-top: 0.75rem;
+  padding-top: 0.75rem;
+  border-top: 1px solid var(--border);
+}
+
+/* Control Buttons placeholder */
+.control-buttons {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+/* Health label */
+.health-label {
+  font-size: 0.75rem;
+  text-transform: capitalize;
+}
