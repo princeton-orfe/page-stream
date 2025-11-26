@@ -671,6 +671,22 @@ body {
   gap: 0.75rem;
 }
 
+.dialog-form {
+  max-width: 450px;
+}
+
+.dialog-form-body {
+  margin-bottom: 1.5rem;
+}
+
+.dialog-form-body .form-group {
+  margin-bottom: 1rem;
+}
+
+.dialog-form-body .form-group:last-child {
+  margin-bottom: 0;
+}
+
 /* Navigation */
 .nav {
   display: flex;

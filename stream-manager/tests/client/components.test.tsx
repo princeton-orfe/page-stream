@@ -1103,9 +1103,11 @@ vi.mock('../../src/client/hooks/useStreamConfig', () => ({
 
 // Mock useTemplates hook
 const mockUseTemplates = vi.fn();
+const mockUseCreateTemplateFromStream = vi.fn();
 
 vi.mock('../../src/client/hooks/useTemplates', () => ({
-  useTemplates: () => mockUseTemplates()
+  useTemplates: () => mockUseTemplates(),
+  useCreateTemplateFromStream: () => mockUseCreateTemplateFromStream()
 }));
 
 describe('CreateStream', () => {
@@ -1247,7 +1249,7 @@ describe('EditStream', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     mockAuthContext.hasCapability.mockImplementation(
-      (cap: string) => ['streams:list', 'streams:read', 'streams:create', 'streams:update', 'streams:delete', 'streams:start'].includes(cap)
+      (cap: string) => ['streams:list', 'streams:read', 'streams:create', 'streams:update', 'streams:delete', 'streams:start', 'templates:create'].includes(cap)
     );
     mockUseUpdateStream.mockReturnValue({
       mutate: vi.fn(),
@@ -1261,6 +1263,11 @@ describe('EditStream', () => {
     mockUseDeployStream.mockReturnValue({
       mutate: vi.fn(),
       isPending: false
+    });
+    mockUseCreateTemplateFromStream.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isSuccess: false
     });
   });
 
@@ -1496,5 +1503,228 @@ describe('EditStream', () => {
     // Check dialog appears
     expect(screen.getByText('Delete Stream')).toBeInTheDocument();
     expect(screen.getByText(/Are you sure you want to delete/)).toBeInTheDocument();
+  });
+
+  it('shows Save as Template button when user has templates:create capability', () => {
+    mockUseStreamConfig.mockReturnValue({
+      data: {
+        config: {
+          id: 'config-123',
+          name: 'test-stream',
+          type: 'standard',
+          enabled: true,
+          url: 'https://example.com',
+          ingest: 'srt://localhost:9000',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          cropInfobar: 0,
+          preset: 'veryfast',
+          videoBitrate: '2500k',
+          audioBitrate: '128k',
+          format: 'mpegts',
+          autoRefreshSeconds: 0,
+          reconnectAttempts: 0,
+          reconnectInitialDelayMs: 1000,
+          reconnectMaxDelayMs: 30000,
+          healthIntervalSeconds: 30,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-16T12:00:00Z',
+          createdBy: 'admin'
+        }
+      },
+      isLoading: false,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    expect(screen.getByText('Save as Template')).toBeInTheDocument();
+  });
+
+  it('hides Save as Template button when user lacks templates:create capability', () => {
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read', 'streams:update'].includes(cap)
+    );
+
+    mockUseStreamConfig.mockReturnValue({
+      data: {
+        config: {
+          id: 'config-123',
+          name: 'test-stream',
+          type: 'standard',
+          enabled: true,
+          url: 'https://example.com',
+          ingest: 'srt://localhost:9000',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          cropInfobar: 0,
+          preset: 'veryfast',
+          videoBitrate: '2500k',
+          audioBitrate: '128k',
+          format: 'mpegts',
+          autoRefreshSeconds: 0,
+          reconnectAttempts: 0,
+          reconnectInitialDelayMs: 1000,
+          reconnectMaxDelayMs: 30000,
+          healthIntervalSeconds: 30,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-16T12:00:00Z',
+          createdBy: 'admin'
+        }
+      },
+      isLoading: false,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    expect(screen.queryByText('Save as Template')).not.toBeInTheDocument();
+  });
+
+  it('opens Save as Template dialog when button is clicked', () => {
+    mockUseStreamConfig.mockReturnValue({
+      data: {
+        config: {
+          id: 'config-123',
+          name: 'test-stream',
+          type: 'standard',
+          enabled: true,
+          url: 'https://example.com',
+          ingest: 'srt://localhost:9000',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          cropInfobar: 0,
+          preset: 'veryfast',
+          videoBitrate: '2500k',
+          audioBitrate: '128k',
+          format: 'mpegts',
+          autoRefreshSeconds: 0,
+          reconnectAttempts: 0,
+          reconnectInitialDelayMs: 1000,
+          reconnectMaxDelayMs: 30000,
+          healthIntervalSeconds: 30,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-16T12:00:00Z',
+          createdBy: 'admin'
+        }
+      },
+      isLoading: false,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    fireEvent.click(screen.getByText('Save as Template'));
+
+    // Check dialog appears with pre-filled values
+    expect(screen.getByRole('heading', { name: 'Save as Template' })).toBeInTheDocument();
+    expect(screen.getByLabelText('Template Name *')).toHaveValue('test-stream Template');
+    expect(screen.getByLabelText('Description')).toHaveValue('Template created from test-stream');
+    expect(screen.getByLabelText('Category')).toHaveValue('custom');
+  });
+
+  it('calls createTemplate mutation with correct data', () => {
+    const mockMutate = vi.fn();
+    mockUseCreateTemplateFromStream.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false,
+      isSuccess: false
+    });
+
+    mockUseStreamConfig.mockReturnValue({
+      data: {
+        config: {
+          id: 'config-123',
+          name: 'test-stream',
+          type: 'standard',
+          enabled: true,
+          url: 'https://example.com',
+          ingest: 'srt://localhost:9000',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          cropInfobar: 0,
+          preset: 'veryfast',
+          videoBitrate: '2500k',
+          audioBitrate: '128k',
+          format: 'mpegts',
+          autoRefreshSeconds: 0,
+          reconnectAttempts: 0,
+          reconnectInitialDelayMs: 1000,
+          reconnectMaxDelayMs: 30000,
+          healthIntervalSeconds: 30,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-16T12:00:00Z',
+          createdBy: 'admin'
+        }
+      },
+      isLoading: false,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    // Open dialog
+    fireEvent.click(screen.getByText('Save as Template'));
+
+    // Modify template name
+    fireEvent.change(screen.getByLabelText('Template Name *'), {
+      target: { value: 'My Custom Template' }
+    });
+    fireEvent.change(screen.getByLabelText('Description'), {
+      target: { value: 'A custom description' }
+    });
+
+    // Click Save Template button
+    fireEvent.click(screen.getByText('Save Template'));
+
+    expect(mockMutate).toHaveBeenCalledWith(
+      {
+        streamId: 'config-123',
+        name: 'My Custom Template',
+        description: 'A custom description',
+        category: 'custom'
+      },
+      expect.any(Object)
+    );
   });
 });

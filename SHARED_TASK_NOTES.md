@@ -3,34 +3,33 @@
 ## Current Status
 **Phase 1 (Read-Only Dashboard)**: COMPLETE
 **Phase 2 (Control Actions)**: COMPLETE
-**Phase 3 (CRUD Operations)**: IN PROGRESS (Steps 3.1-3.6 complete)
+**Phase 3 (CRUD Operations)**: COMPLETE
 
 ## Completed in This Iteration
-- **Step 3.6**: Templates system
-  - Created database migration for `templates` table (007_templates)
-  - Created `src/server/config/templates.ts` with CRUD operations and 7 built-in templates
-  - Created `src/server/routes/templates.ts` with capability-gated API routes
-  - Created `src/client/hooks/useTemplates.ts` for React Query hooks
-  - Created `src/client/components/TemplateSelector.tsx` with category filtering and preview
-  - Updated `CreateStream.tsx` to show template selector first, then form
-  - Added CSS styles for template selector UI
-  - Tests: 516 total tests passing (44 new tests for templates)
+- **Save as Template feature**: Added "Save as Template" button to EditStream page
+  - Capability-gated (`templates:create`)
+  - Dialog with name, description, and category fields
+  - Uses existing `POST /api/templates/from-stream/:streamId` endpoint
+  - 4 new tests added for the feature
+  - Total tests: 520 passing
 
 ## Next Steps
-**Phase 3 (CRUD Operations)** - Consider completing:
-1. "Save as Template" button on EditStream page (API route exists: `POST /api/templates/from-stream/:streamId`)
-
 **Phase 4 (Optional enhancements)**:
-- User management (list users, view activity)
-- Batch operations on streams
-- Dashboard widgets/stats
+- Compositor management (Step 4.1)
+- Stream groups and dependencies (Step 4.2)
+- Scheduling system (Step 4.3)
+- Monitoring and alerts (Step 4.4)
+- User management UI (Step 4.5)
+- Metrics export (Step 4.6)
+- Production hardening (Step 4.7)
+- Auth proxy integration examples (Step 4.8)
 
 ## How to Run
 ```bash
 cd stream-manager
 
 # Development
-npm test           # Run all tests (516 passing)
+npm test           # Run all tests (520 passing)
 npm run typecheck  # TypeScript check
 npm run dev        # Start backend server (port 3001)
 npm run dev:client # Start Vite dev server (port 3000)
@@ -77,11 +76,3 @@ docker-compose up -d
 - `PUT /api/templates/:id` - Update custom template
 - `DELETE /api/templates/:id` - Delete custom template
 - `POST /api/templates/:id/apply` - Apply template (merge with name/url/ingest to get full config)
-
-## Files Added This Iteration
-- `src/server/config/templates.ts` - Template storage with CRUD operations and built-in templates
-- `src/server/routes/templates.ts` - Express routes for template API
-- `src/client/hooks/useTemplates.ts` - React Query hooks for template operations
-- `src/client/components/TemplateSelector.tsx` - Template selection UI with category filter and preview
-- `tests/server/config/templates.test.ts` - Unit tests for template storage
-- `tests/server/routes/templates.test.ts` - Route tests for template API
