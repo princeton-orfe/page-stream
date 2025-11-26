@@ -1,29 +1,18 @@
 # Stream Manager Implementation - Task Notes
 
 ## Current Status
-**Phase 1 (Read-Only Dashboard)**: COMPLETE
-**Phase 2 (Control Actions)**: COMPLETE
-**Phase 3 (CRUD Operations)**: COMPLETE
-**Phase 4.5 (User Management UI)**: COMPLETE
-**Phase 4.1 (Compositor Management)**: COMPLETE
-**Phase 4.2 (Stream Groups)**: COMPLETE
-**Phase 4.3 (Scheduling System)**: COMPLETE
-**Phase 4.4 (Monitoring and Alerts)**: COMPLETE
-**Phase 4.6 (Metrics Export)**: COMPLETE
-**Phase 4.7 (Production Hardening)**: COMPLETE
-**Phase 4.8 (Auth Proxy Docs)**: COMPLETE
+**Phase 1-4**: COMPLETE
+**Grafana Dashboard**: COMPLETE
 
 ## Completed in This Iteration
-- **Auth Proxy Integration Documentation** (Step 4.8):
-  - `docs/auth-oauth2-proxy.md` - Google, Azure AD, Keycloak, OIDC
-  - `docs/auth-azure-easyauth.md` - App Service, Container Apps
-  - `docs/auth-nginx.md` - LDAP, Vouch Proxy, custom auth
-  - Updated README.md to reference new docs
+- Created Grafana dashboard template (`grafana/dashboards/stream-manager.json`)
+- Added Grafana provisioning configs for auto-loading dashboard
+- Created monitoring documentation (`docs/monitoring-grafana.md`)
+- Updated README.md with metrics/monitoring section
 
 ## Next Steps (in priority order)
-1. **Grafana Dashboard Template** - Create JSON dashboard for Prometheus metrics
-2. **E2E Tests** - Add end-to-end integration tests with Docker
-3. **Final Review** - Ensure all Phase 4 deliverables are complete
+1. **E2E Tests** - Add end-to-end integration tests with Docker
+2. **Final Review** - Verify all Phase 4 deliverables are complete, run full test suite
 
 ## How to Run
 ```bash
@@ -49,3 +38,10 @@ docker-compose up -d
 - `docs/auth-oauth2-proxy.md` - OAuth2 Proxy integration
 - `docs/auth-azure-easyauth.md` - Azure EasyAuth integration
 - `docs/auth-nginx.md` - nginx auth_request integration
+- `docs/monitoring-grafana.md` - Grafana dashboard setup
+
+## Grafana Setup
+Dashboard provisioning files are in `grafana/`:
+- `dashboards/stream-manager.json` - Pre-built dashboard
+- `provisioning/dashboards/dashboards.yaml` - Dashboard provisioner
+- `provisioning/datasources/datasources.yaml` - Prometheus datasource

@@ -142,6 +142,32 @@ AUTH_ANONYMOUS_ROLE=  # Empty = reject anonymous
 | `editor` | Operator + create/update streams |
 | `admin` | Full access including user management |
 
+## Monitoring & Metrics
+
+Stream Manager exposes Prometheus metrics at `/metrics` for monitoring.
+
+### Environment Variables
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `METRICS_ENABLED` | `true` | Enable/disable metrics endpoint |
+| `METRICS_API_KEY` | - | Optional API key for metrics authentication |
+| `METRICS_INCLUDE_USER_REQUESTS` | `false` | Include per-user request counts |
+
+### Grafana Dashboard
+
+A pre-built Grafana dashboard is available at `grafana/dashboards/stream-manager.json`. See **[Monitoring with Grafana](docs/monitoring-grafana.md)** for setup instructions.
+
+### Prometheus Configuration
+
+```yaml
+scrape_configs:
+  - job_name: 'stream-manager'
+    static_configs:
+      - targets: ['stream-manager:3001']
+    metrics_path: '/metrics'
+```
+
 ## Auth Proxy Integration
 
 Stream Manager integrates with common authentication proxies. See the detailed guides:
