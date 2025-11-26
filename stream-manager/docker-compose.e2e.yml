@@ -1,0 +1,56 @@
+# E2E Test docker-compose
+#
+# Usage:
+#   # Run E2E tests
+#   docker-compose -f docker-compose.e2e.yml up --build --abort-on-container-exit
+#
+#   # Clean up
+#   docker-compose -f docker-compose.e2e.yml down -v
+
+services:
+  stream-manager:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: stream-manager:e2e-test
+    container_name: stream-manager-e2e
+    ports:
+      - "3001:3001"
+    volumes:
+      # Docker socket for container management (read-only)
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    environment:
+      - PORT=3001
+      - NODE_ENV=test
+      - LOG_LEVEL=info
+      - DATABASE_PATH=/data/stream-manager.db
+      - AUTH_MODE=proxy
+      - AUTH_ANONYMOUS_ROLE=viewer
+      - AUTH_DEFAULT_ROLE=viewer
+      - METRICS_ENABLED=true
+    healthcheck:
+      test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    networks:
+      - e2e-test
+
+  e2e-tests:
+    build:
+      context: .
+      dockerfile: Dockerfile.e2e
+    container_name: stream-manager-e2e-tests
+    depends_on:
+      stream-manager:
+        condition: service_healthy
+    environment:
+      - API_BASE_URL=http://stream-manager:3001
+      - TEST_TIMEOUT=30000
+    networks:
+      - e2e-test
+
+networks:
+  e2e-test:
+    driver: bridge

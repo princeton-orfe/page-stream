@@ -12,9 +12,11 @@
     "build:client": "vite build",
     "start": "node dist/server/index.js",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run",
-    "test:watch": "vitest",
-    "test:coverage": "vitest run --coverage"
+    "test": "vitest run --exclude 'tests/e2e/**'",
+    "test:watch": "vitest --exclude 'tests/e2e/**'",
+    "test:coverage": "vitest run --coverage --exclude 'tests/e2e/**'",
+    "test:e2e": "vitest run --config vitest.e2e.config.ts",
+    "test:e2e:docker": "docker-compose -f docker-compose.e2e.yml up --build --abort-on-container-exit && docker-compose -f docker-compose.e2e.yml down -v"
   },
   "dependencies": {
     "better-sqlite3": "^11.6.0",
