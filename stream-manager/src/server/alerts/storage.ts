@@ -665,3 +665,42 @@ export function getRecentEventsForRule(
   `).all(ruleId, sinceTimestamp) as AlertEventRow[];
   return rows.map(rowToAlertEvent);
 }
+
+// =============================================================================
+// Metrics helpers
+// =============================================================================
+
+/**
+ * Get total count of alert rules
+ */
+export function getAlertRuleCount(): number {
+  const db = getDatabase();
+  const row = db.prepare('SELECT COUNT(*) as count FROM alert_rules').get() as CountRow;
+  return row.count;
+}
+
+/**
+ * Get alert event counts grouped by state
+ */
+export function getAlertEventCountByState(): Record<string, number> {
+  const db = getDatabase();
+
+  // Count by state: active (unresolved), acknowledged, resolved
+  const active = db.prepare(
+    'SELECT COUNT(*) as count FROM alert_events WHERE resolved_at IS NULL AND acknowledged_at IS NULL'
+  ).get() as CountRow;
+
+  const acknowledged = db.prepare(
+    'SELECT COUNT(*) as count FROM alert_events WHERE resolved_at IS NULL AND acknowledged_at IS NOT NULL'
+  ).get() as CountRow;
+
+  const resolved = db.prepare(
+    'SELECT COUNT(*) as count FROM alert_events WHERE resolved_at IS NOT NULL'
+  ).get() as CountRow;
+
+  return {
+    active: active.count,
+    acknowledged: acknowledged.count,
+    resolved: resolved.count
+  };
+}

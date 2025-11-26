@@ -133,3 +133,43 @@ export function listUsers() {
     roles: u.roles ? u.roles.split(',') : []
   }));
 }
+
+// Get count of active users within the specified minutes
+export function getActiveUsersCount(withinMinutes: number): number {
+  const db = getDatabase();
+  const threshold = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString();
+
+  const row = db.prepare(
+    'SELECT COUNT(*) as count FROM users WHERE last_seen >= ?'
+  ).get(threshold) as { count: number };
+
+  return row.count;
+}
+
+// API request count per user
+export interface ApiRequestCount {
+  userId: string;
+  username: string;
+  requestCount: number;
+}
+
+// Get API requests by user within the specified minutes
+// This queries the audit_log for request counts
+export function getRecentApiRequestsByUser(withinMinutes: number): ApiRequestCount[] {
+  const db = getDatabase();
+  const threshold = new Date(Date.now() - withinMinutes * 60 * 1000).toISOString();
+
+  const rows = db.prepare(`
+    SELECT
+      user_id as userId,
+      user_name as username,
+      COUNT(*) as requestCount
+    FROM audit_log
+    WHERE timestamp >= ?
+    GROUP BY user_id
+    ORDER BY requestCount DESC
+    LIMIT 100
+  `).all(threshold) as ApiRequestCount[];
+
+  return rows;
+}

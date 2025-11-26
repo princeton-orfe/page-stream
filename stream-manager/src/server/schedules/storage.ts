@@ -427,3 +427,19 @@ export function duplicateSchedule(
 
   return createSchedule(scheduleCopy, user);
 }
+
+/**
+ * Get schedule statistics for metrics
+ */
+export function getScheduleStats(): { total: number; enabled: number; disabled: number } {
+  const db = getDatabase();
+
+  const total = db.prepare('SELECT COUNT(*) as count FROM schedules').get() as CountRow;
+  const enabled = db.prepare('SELECT COUNT(*) as count FROM schedules WHERE enabled = 1').get() as CountRow;
+
+  return {
+    total: total.count,
+    enabled: enabled.count,
+    disabled: total.count - enabled.count
+  };
+}

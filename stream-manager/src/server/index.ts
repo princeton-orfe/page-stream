@@ -10,7 +10,7 @@ import { DEFAULT_AUTH_CONFIG } from './auth/extractors.js';
 import { AuthConfig } from './auth/types.js';
 import { createRoleStore, recordUserSeen } from './db/users.js';
 import { createWebSocketServer, closeWebSocketServer, broadcastContainerStatusChange } from './websocket.js';
-import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter, groupsRouter, schedulesRouter, alertsRouter } from './routes/index.js';
+import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter, groupsRouter, schedulesRouter, alertsRouter, metricsRouter } from './routes/index.js';
 import { setBroadcastCallback } from './routes/streams.js';
 import { setBroadcastCallback as setCompositorBroadcastCallback } from './routes/compositors.js';
 import { setBroadcastCallback as setGroupsBroadcastCallback } from './routes/groups.js';
@@ -79,6 +79,9 @@ export async function createApp(roleStore?: RoleStore) {
   app.get('/api/health', (req, res) => {
     res.json({ status: 'ok', authMode: authConfig.mode });
   });
+
+  // Metrics endpoint (has its own auth via API key, separate from user auth)
+  app.use('/metrics', metricsRouter);
 
   // API routes
   app.use('/api/auth', authRouter);

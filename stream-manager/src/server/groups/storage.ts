@@ -336,3 +336,12 @@ export function duplicateStreamGroup(
 
   return createStreamGroup(groupCopy, user);
 }
+
+/**
+ * Get total count of stream groups for metrics
+ */
+export function getGroupCount(): number {
+  const db = getDatabase();
+  const row = db.prepare('SELECT COUNT(*) as count FROM stream_groups').get() as CountRow;
+  return row.count;
+}

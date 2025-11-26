@@ -6,3 +6,4 @@ export { default as compositorsRouter } from './compositors.js';
 export { default as groupsRouter } from './groups.js';
 export { default as schedulesRouter } from './schedules.js';
 export { default as alertsRouter } from './alerts.js';
+export { default as metricsRouter } from '../metrics/index.js';
