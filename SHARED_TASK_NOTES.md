@@ -4,22 +4,24 @@
 **Phase 1 (Read-Only Dashboard)**: COMPLETE
 **Phase 2 (Control Actions)**: COMPLETE
 **Phase 3 (CRUD Operations)**: COMPLETE
+**Phase 4.5 (User Management UI)**: COMPLETE
 
 ## Completed in This Iteration
-- **Save as Template feature**: Added "Save as Template" button to EditStream page
-  - Capability-gated (`templates:create`)
-  - Dialog with name, description, and category fields
-  - Uses existing `POST /api/templates/from-stream/:streamId` endpoint
-  - 4 new tests added for the feature
-  - Total tests: 520 passing
+- **User Management UI**: Added admin page for viewing and managing users
+  - Lists all users with their roles, email, first/last seen timestamps
+  - Role editor with checkbox interface for assigning/removing roles
+  - Roles legend showing available roles and descriptions
+  - Capability-gated (`users:list` to view, `users:manage` to edit roles)
+  - New endpoint: `GET /api/auth/roles` to fetch available roles
+  - 12 new tests added (10 client, 2 server)
+  - Total tests: 532 passing
 
 ## Next Steps
-**Phase 4 (Optional enhancements)**:
+**Phase 4 (Remaining optional enhancements)**:
 - Compositor management (Step 4.1)
 - Stream groups and dependencies (Step 4.2)
 - Scheduling system (Step 4.3)
 - Monitoring and alerts (Step 4.4)
-- User management UI (Step 4.5)
 - Metrics export (Step 4.6)
 - Production hardening (Step 4.7)
 - Auth proxy integration examples (Step 4.8)
@@ -29,7 +31,7 @@
 cd stream-manager
 
 # Development
-npm test           # Run all tests (520 passing)
+npm test           # Run all tests (532 passing)
 npm run typecheck  # TypeScript check
 npm run dev        # Start backend server (port 3001)
 npm run dev:client # Start Vite dev server (port 3000)
@@ -57,6 +59,7 @@ docker-compose up -d
 - **Route Ordering**: `/configs` routes placed before `/:id` routes to prevent Express from matching "configs" as an ID parameter
 - **Form Tabs**: StreamForm uses Basic/Encoding/Behavior/Advanced tabs for organized configuration
 - **Templates**: Built-in templates are immutable; custom templates can be created/deleted by their creator; template selector is shown before stream creation form
+- **User Management**: Users page shows all users who have accessed the system; roles can be assigned via checkbox interface
 
 ## API Endpoints
 
@@ -76,3 +79,10 @@ docker-compose up -d
 - `PUT /api/templates/:id` - Update custom template
 - `DELETE /api/templates/:id` - Delete custom template
 - `POST /api/templates/:id/apply` - Apply template (merge with name/url/ingest to get full config)
+
+### Auth/Users
+- `GET /api/auth/me` - Get current user info and capabilities
+- `GET /api/auth/capabilities` - Get capabilities with helper booleans
+- `GET /api/auth/users` - List all users (requires `users:list`)
+- `GET /api/auth/roles` - List all roles (requires `users:list`)
+- `PUT /api/auth/users/:id/roles` - Update user roles (requires `users:manage`)

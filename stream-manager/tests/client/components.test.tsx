@@ -1728,3 +1728,221 @@ describe('EditStream', () => {
     );
   });
 });
+
+// UserManagement tests
+import { UserManagement } from '../../src/client/pages/UserManagement';
+
+const mockUseUsers = vi.fn();
+const mockUseRoles = vi.fn();
+const mockUseUpdateUserRoles = vi.fn();
+
+vi.mock('../../src/client/hooks/useUsers', () => ({
+  useUsers: () => mockUseUsers(),
+  useRoles: () => mockUseRoles(),
+  useUpdateUserRoles: () => mockUseUpdateUserRoles()
+}));
+
+describe('UserManagement', () => {
+  const mockOnBack = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockUseRoles.mockReturnValue({
+      data: [
+        { id: 'viewer', name: 'Viewer', description: 'Read-only access', capabilities: ['streams:list'], builtIn: true },
+        { id: 'operator', name: 'Operator', description: 'Can control streams', capabilities: ['streams:start'], builtIn: true },
+        { id: 'admin', name: 'Administrator', description: 'Full access', capabilities: ['*'], builtIn: true }
+      ],
+      isLoading: false
+    });
+    mockUseUpdateUserRoles.mockReturnValue({
+      mutateAsync: vi.fn().mockResolvedValue({}),
+      isPending: false,
+      isError: false,
+      error: null
+    });
+  });
+
+  it('renders loading state', () => {
+    mockUseUsers.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+    expect(screen.getByText('Loading users...')).toBeInTheDocument();
+  });
+
+  it('renders error state', () => {
+    const refetch = vi.fn();
+    mockUseUsers.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('Failed to fetch users'),
+      refetch
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+    expect(screen.getByText(/Error loading users.*Failed to fetch users/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Retry'));
+    expect(refetch).toHaveBeenCalled();
+  });
+
+  it('renders empty state when no users', () => {
+    mockUseUsers.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+    expect(screen.getByText('No Users')).toBeInTheDocument();
+    expect(screen.getByText('No users have accessed the system yet.')).toBeInTheDocument();
+  });
+
+  it('renders user list', () => {
+    mockUseUsers.mockReturnValue({
+      data: [
+        { id: 'user1', username: 'John Doe', email: 'john@example.com', firstSeen: '2024-01-01T10:00:00Z', lastSeen: '2024-01-15T12:00:00Z', roles: ['viewer'] },
+        { id: 'user2', username: 'Jane Admin', email: 'jane@example.com', firstSeen: '2024-01-02T10:00:00Z', lastSeen: '2024-01-16T12:00:00Z', roles: ['admin'] }
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+    expect(screen.getByText('John Doe')).toBeInTheDocument();
+    expect(screen.getByText('Jane Admin')).toBeInTheDocument();
+    expect(screen.getByText('john@example.com')).toBeInTheDocument();
+    expect(screen.getByText('2 users registered')).toBeInTheDocument();
+  });
+
+  it('shows role badges for users', () => {
+    mockUseUsers.mockReturnValue({
+      data: [
+        { id: 'user1', username: 'John', email: null, firstSeen: '2024-01-01T10:00:00Z', lastSeen: '2024-01-15T12:00:00Z', roles: ['viewer', 'operator'] }
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+    // Check that badges exist (multiple due to legend)
+    const viewerBadges = screen.getAllByText('Viewer');
+    const operatorBadges = screen.getAllByText('Operator');
+    expect(viewerBadges.length).toBeGreaterThan(0);
+    expect(operatorBadges.length).toBeGreaterThan(0);
+  });
+
+  it('opens role editor when Edit Roles is clicked', () => {
+    mockUseUsers.mockReturnValue({
+      data: [
+        { id: 'user1', username: 'John', email: null, firstSeen: '2024-01-01T10:00:00Z', lastSeen: '2024-01-15T12:00:00Z', roles: ['viewer'] }
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+
+    fireEvent.click(screen.getByText('Edit Roles'));
+
+    // Should see checkboxes for roles
+    expect(screen.getByLabelText('Viewer')).toBeInTheDocument();
+    expect(screen.getByLabelText('Operator')).toBeInTheDocument();
+    expect(screen.getByLabelText('Administrator')).toBeInTheDocument();
+
+    // Viewer should be checked (current role)
+    expect(screen.getByLabelText('Viewer')).toBeChecked();
+  });
+
+  it('saves role changes when Save is clicked', async () => {
+    const mockMutateAsync = vi.fn().mockResolvedValue({});
+    mockUseUpdateUserRoles.mockReturnValue({
+      mutateAsync: mockMutateAsync,
+      isPending: false,
+      isError: false,
+      error: null
+    });
+
+    mockUseUsers.mockReturnValue({
+      data: [
+        { id: 'user1', username: 'John', email: null, firstSeen: '2024-01-01T10:00:00Z', lastSeen: '2024-01-15T12:00:00Z', roles: ['viewer'] }
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+
+    fireEvent.click(screen.getByText('Edit Roles'));
+    fireEvent.click(screen.getByLabelText('Operator'));
+    fireEvent.click(screen.getByText('Save'));
+
+    await waitFor(() => {
+      expect(mockMutateAsync).toHaveBeenCalledWith({
+        userId: 'user1',
+        roles: ['viewer', 'operator']
+      });
+    });
+  });
+
+  it('cancels editing when Cancel is clicked', () => {
+    mockUseUsers.mockReturnValue({
+      data: [
+        { id: 'user1', username: 'John', email: null, firstSeen: '2024-01-01T10:00:00Z', lastSeen: '2024-01-15T12:00:00Z', roles: ['viewer'] }
+      ],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+
+    fireEvent.click(screen.getByText('Edit Roles'));
+    expect(screen.getByLabelText('Viewer')).toBeInTheDocument();
+
+    fireEvent.click(screen.getByText('Cancel'));
+
+    // Should go back to showing badges (no checkbox labels)
+    expect(screen.queryByLabelText('Viewer')).not.toBeInTheDocument();
+    // The Edit Roles button should be back
+    expect(screen.getByText('Edit Roles')).toBeInTheDocument();
+  });
+
+  it('calls onBack when back button is clicked', () => {
+    mockUseUsers.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+    fireEvent.click(screen.getByText('Back'));
+    expect(mockOnBack).toHaveBeenCalled();
+  });
+
+  it('displays roles legend', () => {
+    mockUseUsers.mockReturnValue({
+      data: [],
+      isLoading: false,
+      error: null,
+      refetch: vi.fn()
+    });
+
+    render(<QueryWrapper><UserManagement onBack={mockOnBack} /></QueryWrapper>);
+    expect(screen.getByText('Available Roles')).toBeInTheDocument();
+    expect(screen.getByText('Read-only access')).toBeInTheDocument();
+    expect(screen.getByText('Can control streams')).toBeInTheDocument();
+    expect(screen.getByText('Full access')).toBeInTheDocument();
+  });
+});

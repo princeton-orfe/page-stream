@@ -92,6 +92,20 @@ export function removeUserRole(userId: string, roleId: string) {
   db.prepare('DELETE FROM user_roles WHERE user_id = ? AND role_id = ?').run(userId, roleId);
 }
 
+// Get all roles
+export function getRoles() {
+  const db = getDatabase();
+  const rows = db.prepare('SELECT * FROM roles').all() as RoleRow[];
+
+  return rows.map(row => ({
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    capabilities: JSON.parse(row.capabilities) as Capability[] | ['*'],
+    builtIn: row.built_in === 1
+  }));
+}
+
 // List all known users with their roles
 export function listUsers() {
   const db = getDatabase();

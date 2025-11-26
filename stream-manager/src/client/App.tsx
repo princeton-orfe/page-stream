@@ -8,6 +8,7 @@ import { AuditLog } from './components/AuditLog';
 import { CapabilityGate } from './components/CapabilityGate';
 import { CreateStream } from './pages/CreateStream';
 import { EditStream } from './pages/EditStream';
+import { UserManagement } from './pages/UserManagement';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAuth } from './hooks/useAuth';
 import { StreamContainer } from './types';
@@ -21,7 +22,7 @@ const queryClient = new QueryClient({
   }
 });
 
-type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream';
+type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users';
 
 function AppContent() {
   const [view, setView] = useState<View>('dashboard');
@@ -54,6 +55,10 @@ function AppContent() {
 
   const handleAuditClick = useCallback(() => {
     setView('audit');
+  }, []);
+
+  const handleUsersClick = useCallback(() => {
+    setView('users');
   }, []);
 
   const handleCreateClick = useCallback(() => {
@@ -121,6 +126,8 @@ function AppContent() {
         ) : null;
       case 'audit':
         return <AuditLog onBack={handleBack} />;
+      case 'users':
+        return <UserManagement onBack={handleBack} />;
       case 'create-stream':
         return (
           <CreateStream
@@ -171,6 +178,14 @@ function AppContent() {
               onClick={handleAuditClick}
             >
               Audit Log
+            </button>
+          </CapabilityGate>
+          <CapabilityGate require="users:list">
+            <button
+              className={`nav-button ${view === 'users' ? 'active' : ''}`}
+              onClick={handleUsersClick}
+            >
+              Users
             </button>
           </CapabilityGate>
         </nav>

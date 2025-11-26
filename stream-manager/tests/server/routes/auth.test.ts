@@ -8,7 +8,8 @@ import type { RequestContext, Capability, User } from '../../../src/server/auth/
 vi.mock('../../../src/server/db/users.js', () => ({
   listUsers: vi.fn(),
   assignUserRole: vi.fn(),
-  removeUserRole: vi.fn()
+  removeUserRole: vi.fn(),
+  getRoles: vi.fn()
 }));
 
 // Mock the db/audit module
@@ -171,6 +172,41 @@ describe('Auth Routes', () => {
       app.use('/api/auth', authRouter);
 
       const response = await request(app).get('/api/auth/users');
+
+      expect(response.status).toBe(403);
+      expect(response.body.missing).toContain('users:list');
+    });
+  });
+
+  describe('GET /api/auth/roles', () => {
+    it('should return roles list with users:list capability', async () => {
+      const ctx = createMockContext(['users:list']);
+      vi.mocked(usersDb.getRoles).mockReturnValue([
+        { id: 'viewer', name: 'Viewer', description: 'Read-only access', capabilities: ['streams:list', 'streams:read'], builtIn: true },
+        { id: 'admin', name: 'Administrator', description: 'Full access', capabilities: ['*'], builtIn: true }
+      ]);
+
+      app = express();
+      app.use(injectContext(ctx));
+      app.use('/api/auth', authRouter);
+
+      const response = await request(app).get('/api/auth/roles');
+
+      expect(response.status).toBe(200);
+      expect(response.body.roles).toHaveLength(2);
+      expect(response.body.roles[0].id).toBe('viewer');
+      expect(response.body.roles[1].id).toBe('admin');
+      expect(usersDb.getRoles).toHaveBeenCalled();
+    });
+
+    it('should return 403 without users:list capability', async () => {
+      const ctx = createMockContext(['streams:list']); // No users:list
+
+      app = express();
+      app.use(injectContext(ctx));
+      app.use('/api/auth', authRouter);
+
+      const response = await request(app).get('/api/auth/roles');
 
       expect(response.status).toBe(403);
       expect(response.body.missing).toContain('users:list');

@@ -1,6 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { requireCapability } from '../auth/index.js';
-import { listUsers, assignUserRole, removeUserRole } from '../db/users.js';
+import { listUsers, assignUserRole, removeUserRole, getRoles } from '../db/users.js';
 import { logAuditEvent } from '../db/audit.js';
 
 const router = Router();
@@ -46,6 +46,16 @@ router.get(
   asyncHandler(async (_req, res) => {
     const users = listUsers();
     res.json({ users });
+  })
+);
+
+// GET /api/auth/roles - List all roles (admin only)
+router.get(
+  '/roles',
+  requireCapability('users:list'),
+  asyncHandler(async (_req, res) => {
+    const roles = getRoles();
+    res.json({ roles });
   })
 );
 
