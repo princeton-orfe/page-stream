@@ -27,6 +27,7 @@ services:
       - AUTH_MODE=proxy
       - AUTH_ANONYMOUS_ROLE=viewer
       - AUTH_DEFAULT_ROLE=viewer
+      - AUTH_GROUP_ROLES={"admin":["admin"],"operator":["operator"],"editor":["editor"],"viewer":["viewer"]}
       - METRICS_ENABLED=true
     healthcheck:
       test: ["CMD", "wget", "-q", "--spider", "http://localhost:3001/api/health"]

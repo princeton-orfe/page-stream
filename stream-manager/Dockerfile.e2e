@@ -14,7 +14,7 @@ RUN npm ci
 
 # Copy test files
 COPY tests/ ./tests/
-COPY vitest.config.ts ./
+COPY vitest.config.ts vitest.e2e.config.ts ./
 COPY tsconfig*.json ./
 
 # Copy source for type resolution (tests import from src)

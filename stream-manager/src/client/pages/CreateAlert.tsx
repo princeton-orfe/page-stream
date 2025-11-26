@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { AlertForm } from '../components/AlertForm';
-import { useCreateAlertRule, AlertRuleCreateInput } from '../hooks/useAlerts';
+import { useCreateAlertRule, AlertRuleCreateInput, AlertRuleUpdateInput } from '../hooks/useAlerts';
 
 interface CreateAlertProps {
   onBack: () => void;
@@ -11,9 +11,10 @@ export function CreateAlert({ onBack, onSuccess }: CreateAlertProps) {
   const createAlert = useCreateAlertRule();
   const [error, setError] = useState<string | null>(null);
 
-  const handleSubmit = async (data: AlertRuleCreateInput) => {
+  const handleSubmit = async (data: AlertRuleCreateInput | AlertRuleUpdateInput) => {
     setError(null);
     try {
+      // For create, all required fields are present
       const result = await createAlert.mutateAsync(data as AlertRuleCreateInput);
       if (onSuccess) {
         onSuccess(result.id);

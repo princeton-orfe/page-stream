@@ -64,18 +64,23 @@ describe('E2E: Authentication', () => {
     expect(response.body.user.username).toBe('E2E Test User');
   });
 
-  it('should return roles list', async () => {
-    const response = await api('/api/auth/roles');
+  it('should return roles list (admin only)', async () => {
+    const response = await api('/api/auth/roles', {
+      headers: {
+        'x-forwarded-user': 'admin-user',
+        'x-forwarded-groups': 'admin',
+      },
+    });
 
     expect(response.status).toBe(200);
     expect(response.body.roles).toBeDefined();
     expect(Array.isArray(response.body.roles)).toBe(true);
 
-    // Should have built-in roles
-    const roleNames = response.body.roles.map((r: { name: string }) => r.name);
-    expect(roleNames).toContain('viewer');
-    expect(roleNames).toContain('operator');
-    expect(roleNames).toContain('admin');
+    // Should have built-in roles (check by id, not name)
+    const roleIds = response.body.roles.map((r: { id: string }) => r.id);
+    expect(roleIds).toContain('viewer');
+    expect(roleIds).toContain('operator');
+    expect(roleIds).toContain('admin');
   });
 });
 
@@ -115,12 +120,12 @@ describe('E2E: Alerts API', () => {
     expect(Array.isArray(response.body.rules)).toBe(true);
   });
 
-  it('should list alert history', async () => {
-    const response = await api('/api/alerts/history');
+  it('should list alert events', async () => {
+    const response = await api('/api/alerts/events');
 
     expect(response.status).toBe(200);
-    expect(response.body.alerts).toBeDefined();
-    expect(Array.isArray(response.body.alerts)).toBe(true);
+    expect(response.body.events).toBeDefined();
+    expect(Array.isArray(response.body.events)).toBe(true);
   });
 });
 
