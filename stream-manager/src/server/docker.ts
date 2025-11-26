@@ -416,6 +416,128 @@ export async function execInContainer(id: string, cmd: string[]): Promise<ExecRe
 }
 
 /**
+ * Remove a container (stop if running, then remove)
+ * @param id Container ID or name
+ * @param force Force removal even if running (default: false)
+ */
+export async function removeContainer(id: string, force: boolean = false): Promise<void> {
+  return withRetry(async () => {
+    const container = await verifyManagedContainer(id);
+    const info = await container.inspect();
+
+    // Stop if running and not force-removing
+    if (info.State.Running && !force) {
+      await container.stop({ t: 10 });
+    }
+
+    await container.remove({ force });
+  });
+}
+
+/**
+ * Create and start a new container from configuration
+ * @param containerConfig Docker container creation options
+ * @returns Container ID
+ */
+export async function createAndStartContainer(
+  containerConfig: {
+    name: string;
+    Image: string;
+    Cmd: string[];
+    Env: string[];
+    Labels: Record<string, string>;
+    HostConfig: {
+      Binds: string[];
+      NetworkMode: string;
+      RestartPolicy: {
+        Name: 'no' | 'always' | 'unless-stopped' | 'on-failure';
+        MaximumRetryCount?: number;
+      };
+    };
+    Healthcheck?: {
+      Test: string[];
+      Interval: number;
+      Timeout: number;
+      Retries: number;
+      StartPeriod: number;
+    };
+  }
+): Promise<string> {
+  const docker = getDocker();
+
+  // Check if container with same name already exists
+  const containers = await docker.listContainers({ all: true });
+  const existingContainer = containers.find(
+    c => c.Names.some(n => n === `/${containerConfig.name}` || n === containerConfig.name)
+  );
+
+  if (existingContainer) {
+    const error = new Error(`Container with name "${containerConfig.name}" already exists`);
+    (error as Error & { statusCode: number }).statusCode = 409;
+    throw error;
+  }
+
+  // Create the container
+  const container = await docker.createContainer(containerConfig);
+
+  // Start the container
+  await container.start();
+
+  return container.id;
+}
+
+/**
+ * Get a container by name (not ID)
+ * @param name Container name
+ * @returns Container info or null if not found
+ */
+export async function getContainerByName(name: string): Promise<StreamContainer | null> {
+  const docker = getDocker();
+
+  return withRetry(async () => {
+    try {
+      // Docker API allows getting by name with a leading slash
+      const container = docker.getContainer(name);
+      const info = await container.inspect();
+
+      // Verify it's a page-stream container
+      const isManaged = info.Config.Image.includes('page-stream') ||
+        info.Config.Labels?.['com.page-stream.managed'] === 'true';
+
+      if (!isManaged) {
+        return null;
+      }
+
+      return {
+        id: info.Id,
+        name: info.Name.replace(/^\//, ''),
+        status: normalizeContainerStatus(info.State.Status),
+        health: normalizeHealthStatus(info.State.Health),
+        created: info.Created,
+        image: info.Config.Image,
+        labels: info.Config.Labels || {},
+        ports: Object.entries(info.NetworkSettings.Ports || {}).flatMap(([portProto, bindings]) => {
+          const [port, protocol] = portProto.split('/');
+          if (!bindings) {
+            return [{ container: parseInt(port), protocol }];
+          }
+          return bindings.map(binding => ({
+            container: parseInt(port),
+            host: binding.HostPort ? parseInt(binding.HostPort) : undefined,
+            protocol
+          }));
+        })
+      };
+    } catch (error) {
+      if ((error as { statusCode?: number }).statusCode === 404) {
+        return null;
+      }
+      throw error;
+    }
+  });
+}
+
+/**
  * Refresh a page-stream container by writing to the FIFO
  * Falls back to SIGHUP if FIFO refresh fails
  * @param id Container ID or name

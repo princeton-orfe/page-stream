@@ -9,13 +9,20 @@ const mockContainer = {
   restart: vi.fn(),
   kill: vi.fn(),
   exec: vi.fn(),
-  logs: vi.fn()
+  logs: vi.fn(),
+  remove: vi.fn()
+};
+
+const mockCreatedContainer = {
+  id: 'new-container-123',
+  start: vi.fn()
 };
 
 const mockDocker = {
   getContainer: vi.fn(() => mockContainer),
   listContainers: vi.fn(),
-  ping: vi.fn()
+  ping: vi.fn(),
+  createContainer: vi.fn(() => mockCreatedContainer)
 };
 
 vi.mock('dockerode', () => ({
@@ -329,6 +336,218 @@ describe('Docker Control Functions', () => {
       expect(result.stdout).toBe('output');
       expect(result.stderr).toBe('error');
       expect(result.exitCode).toBe(0);
+    });
+  });
+
+  describe('removeContainer', () => {
+    it('should stop and remove a running container', async () => {
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'container123',
+        Name: '/test-page-stream',
+        Config: {
+          Image: 'page-stream:latest',
+          Labels: { 'com.page-stream.managed': 'true' }
+        },
+        State: { Status: 'running', Running: true }
+      });
+      mockContainer.stop.mockResolvedValue(undefined);
+      mockContainer.remove.mockResolvedValue(undefined);
+
+      const { removeContainer } = await import('../../src/server/docker.js');
+      await removeContainer('container123');
+
+      expect(mockContainer.stop).toHaveBeenCalledWith({ t: 10 });
+      expect(mockContainer.remove).toHaveBeenCalledWith({ force: false });
+    });
+
+    it('should remove stopped container without stopping first', async () => {
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'container123',
+        Name: '/test-page-stream',
+        Config: {
+          Image: 'page-stream:latest',
+          Labels: { 'com.page-stream.managed': 'true' }
+        },
+        State: { Status: 'exited', Running: false }
+      });
+      mockContainer.remove.mockResolvedValue(undefined);
+
+      const { removeContainer } = await import('../../src/server/docker.js');
+      await removeContainer('container123');
+
+      expect(mockContainer.stop).not.toHaveBeenCalled();
+      expect(mockContainer.remove).toHaveBeenCalledWith({ force: false });
+    });
+
+    it('should force remove running container when force=true', async () => {
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'container123',
+        Name: '/test-page-stream',
+        Config: {
+          Image: 'page-stream:latest',
+          Labels: { 'com.page-stream.managed': 'true' }
+        },
+        State: { Status: 'running', Running: true }
+      });
+      mockContainer.remove.mockResolvedValue(undefined);
+
+      const { removeContainer } = await import('../../src/server/docker.js');
+      await removeContainer('container123', true);
+
+      expect(mockContainer.stop).not.toHaveBeenCalled();
+      expect(mockContainer.remove).toHaveBeenCalledWith({ force: true });
+    });
+
+    it('should reject removing non-managed containers', async () => {
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'other123',
+        Name: '/nginx',
+        Config: {
+          Image: 'nginx:latest',
+          Labels: {}
+        },
+        State: { Status: 'running', Running: true }
+      });
+
+      const { removeContainer } = await import('../../src/server/docker.js');
+
+      await expect(removeContainer('other123')).rejects.toThrow('not a managed page-stream container');
+    });
+  });
+
+  describe('createAndStartContainer', () => {
+    beforeEach(() => {
+      mockDocker.listContainers.mockResolvedValue([]);
+      mockDocker.createContainer.mockResolvedValue(mockCreatedContainer);
+      mockCreatedContainer.start.mockResolvedValue(undefined);
+    });
+
+    it('should create and start a new container', async () => {
+      const containerConfig = {
+        name: 'test-stream',
+        Image: 'page-stream:latest',
+        Cmd: ['--ingest', 'srt://localhost:9000', '--url', 'https://example.com'],
+        Env: ['DISPLAY=:99'],
+        Labels: { 'com.page-stream.managed': 'true' },
+        HostConfig: {
+          Binds: ['./demo:/app/demo:ro'],
+          NetworkMode: 'bridge',
+          RestartPolicy: { Name: 'on-failure' as const, MaximumRetryCount: 3 }
+        }
+      };
+
+      const { createAndStartContainer } = await import('../../src/server/docker.js');
+      const containerId = await createAndStartContainer(containerConfig);
+
+      expect(mockDocker.createContainer).toHaveBeenCalledWith(containerConfig);
+      expect(mockCreatedContainer.start).toHaveBeenCalled();
+      expect(containerId).toBe('new-container-123');
+    });
+
+    it('should reject if container with same name exists', async () => {
+      mockDocker.listContainers.mockResolvedValue([
+        { Names: ['/test-stream'], Id: 'existing-123' }
+      ]);
+
+      const containerConfig = {
+        name: 'test-stream',
+        Image: 'page-stream:latest',
+        Cmd: ['--ingest', 'srt://localhost:9000', '--url', 'https://example.com'],
+        Env: ['DISPLAY=:99'],
+        Labels: {},
+        HostConfig: {
+          Binds: [],
+          NetworkMode: 'bridge',
+          RestartPolicy: { Name: 'on-failure' as const }
+        }
+      };
+
+      const { createAndStartContainer } = await import('../../src/server/docker.js');
+
+      await expect(createAndStartContainer(containerConfig)).rejects.toThrow(
+        'Container with name "test-stream" already exists'
+      );
+    });
+
+    it('should set 409 status code on conflict error', async () => {
+      mockDocker.listContainers.mockResolvedValue([
+        { Names: ['/test-stream'], Id: 'existing-123' }
+      ]);
+
+      const containerConfig = {
+        name: 'test-stream',
+        Image: 'page-stream:latest',
+        Cmd: [],
+        Env: [],
+        Labels: {},
+        HostConfig: {
+          Binds: [],
+          NetworkMode: 'bridge',
+          RestartPolicy: { Name: 'on-failure' as const }
+        }
+      };
+
+      const { createAndStartContainer } = await import('../../src/server/docker.js');
+
+      try {
+        await createAndStartContainer(containerConfig);
+        expect.fail('Should have thrown');
+      } catch (error) {
+        expect((error as Error & { statusCode: number }).statusCode).toBe(409);
+      }
+    });
+  });
+
+  describe('getContainerByName', () => {
+    it('should get a container by name', async () => {
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'container123',
+        Name: '/my-stream',
+        Config: {
+          Image: 'page-stream:latest',
+          Labels: { 'com.page-stream.managed': 'true' }
+        },
+        State: { Status: 'running', Health: { Status: 'healthy' } },
+        Created: '2024-01-01T00:00:00Z',
+        NetworkSettings: { Ports: {} }
+      });
+
+      const { getContainerByName } = await import('../../src/server/docker.js');
+      const container = await getContainerByName('my-stream');
+
+      expect(container).not.toBeNull();
+      expect(container!.name).toBe('my-stream');
+      expect(container!.status).toBe('running');
+    });
+
+    it('should return null for non-managed containers', async () => {
+      mockContainer.inspect.mockResolvedValue({
+        Id: 'nginx123',
+        Name: '/nginx',
+        Config: {
+          Image: 'nginx:latest',
+          Labels: {}
+        },
+        State: { Status: 'running' },
+        Created: '2024-01-01T00:00:00Z',
+        NetworkSettings: { Ports: {} }
+      });
+
+      const { getContainerByName } = await import('../../src/server/docker.js');
+      const container = await getContainerByName('nginx');
+
+      expect(container).toBeNull();
+    });
+
+    it('should return null for non-existent containers', async () => {
+      const notFoundError = new Error('Container not found');
+      (notFoundError as Error & { statusCode: number }).statusCode = 404;
+      mockContainer.inspect.mockRejectedValue(notFoundError);
+
+      const { getContainerByName } = await import('../../src/server/docker.js');
+      const container = await getContainerByName('nonexistent');
+
+      expect(container).toBeNull();
     });
   });
 });
