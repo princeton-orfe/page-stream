@@ -9,6 +9,7 @@ import { CapabilityGate } from './components/CapabilityGate';
 import { CreateStream } from './pages/CreateStream';
 import { EditStream } from './pages/EditStream';
 import { UserManagement } from './pages/UserManagement';
+import { Compositors } from './pages/Compositors';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAuth } from './hooks/useAuth';
 import { StreamContainer } from './types';
@@ -22,7 +23,7 @@ const queryClient = new QueryClient({
   }
 });
 
-type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users';
+type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users' | 'compositors';
 
 function AppContent() {
   const [view, setView] = useState<View>('dashboard');
@@ -59,6 +60,10 @@ function AppContent() {
 
   const handleUsersClick = useCallback(() => {
     setView('users');
+  }, []);
+
+  const handleCompositorsClick = useCallback(() => {
+    setView('compositors');
   }, []);
 
   const handleCreateClick = useCallback(() => {
@@ -128,6 +133,8 @@ function AppContent() {
         return <AuditLog onBack={handleBack} />;
       case 'users':
         return <UserManagement onBack={handleBack} />;
+      case 'compositors':
+        return <Compositors onBack={handleBack} />;
       case 'create-stream':
         return (
           <CreateStream
@@ -186,6 +193,14 @@ function AppContent() {
               onClick={handleUsersClick}
             >
               Users
+            </button>
+          </CapabilityGate>
+          <CapabilityGate require="compositors:list">
+            <button
+              className={`nav-button ${view === 'compositors' ? 'active' : ''}`}
+              onClick={handleCompositorsClick}
+            >
+              Compositors
             </button>
           </CapabilityGate>
         </nav>

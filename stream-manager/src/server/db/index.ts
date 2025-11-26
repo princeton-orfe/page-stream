@@ -199,4 +199,36 @@ function runMigrations(db: Database.Database) {
 
     db.prepare('INSERT INTO migrations (name) VALUES (?)').run('007_templates');
   }
+
+  // Migration: compositors table
+  if (!appliedNames.includes('008_compositors')) {
+    db.exec(`
+      CREATE TABLE compositors (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        layout TEXT NOT NULL DEFAULT 'side-by-side',
+        inputs TEXT NOT NULL,
+        custom_filter_complex TEXT,
+        pip_config TEXT,
+        output_width INTEGER NOT NULL DEFAULT 1920,
+        output_height INTEGER NOT NULL DEFAULT 1080,
+        output_fps INTEGER NOT NULL DEFAULT 30,
+        preset TEXT NOT NULL DEFAULT 'ultrafast',
+        video_bitrate TEXT NOT NULL DEFAULT '3000k',
+        audio_bitrate TEXT NOT NULL DEFAULT '128k',
+        format TEXT NOT NULL DEFAULT 'mpegts',
+        output_ingest TEXT NOT NULL,
+        extra_ffmpeg_args TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT NOT NULL,
+        updated_by TEXT
+      );
+      CREATE INDEX idx_compositors_name ON compositors(name);
+      CREATE INDEX idx_compositors_enabled ON compositors(enabled);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('008_compositors');
+  }
 }

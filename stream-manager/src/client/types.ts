@@ -43,3 +43,48 @@ export interface HealthStatus {
   retrying: boolean;
   infobarDismissTried: boolean;
 }
+
+// Compositor types
+export type CompositorLayout = 'side-by-side' | 'stacked' | 'grid' | 'pip' | 'custom';
+
+export interface CompositorInput {
+  name: string;
+  listenPort: number;
+  width?: number;
+  height?: number;
+  streamId?: string;
+}
+
+export interface PipConfig {
+  mainInput: string;
+  pipInput: string;
+  position: 'top-left' | 'top-right' | 'bottom-left' | 'bottom-right';
+  pipScale: number;
+  margin: number;
+}
+
+export interface CompositorConfig {
+  id: string;
+  name: string;
+  enabled: boolean;
+  layout: CompositorLayout;
+  inputs: CompositorInput[];
+  customFilterComplex?: string;
+  pipConfig?: PipConfig;
+  outputWidth: number;
+  outputHeight: number;
+  outputFps: number;
+  preset: string;
+  videoBitrate: string;
+  audioBitrate: string;
+  format: string;
+  outputIngest: string;
+  extraFfmpegArgs?: string[];
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy?: string;
+  // Extended fields from API
+  containerStatus?: 'running' | 'stopped' | 'restarting' | 'exited';
+  containerId?: string;
+}

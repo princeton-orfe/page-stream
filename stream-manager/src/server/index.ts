@@ -10,8 +10,9 @@ import { DEFAULT_AUTH_CONFIG } from './auth/extractors.js';
 import { AuthConfig } from './auth/types.js';
 import { createRoleStore, recordUserSeen } from './db/users.js';
 import { createWebSocketServer, closeWebSocketServer, broadcastContainerStatusChange } from './websocket.js';
-import { streamsRouter, authRouter, auditRouter, templatesRouter } from './routes/index.js';
+import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter } from './routes/index.js';
 import { setBroadcastCallback } from './routes/streams.js';
+import { setBroadcastCallback as setCompositorBroadcastCallback } from './routes/compositors.js';
 import { initializeBuiltInTemplates } from './config/templates.js';
 
 // Load config from environment
@@ -81,6 +82,7 @@ export async function createApp(roleStore?: RoleStore) {
   app.use('/api/streams', streamsRouter);
   app.use('/api/audit', auditRouter);
   app.use('/api/templates', templatesRouter);
+  app.use('/api/compositors', compositorsRouter);
 
   // Static files (frontend)
   app.use(express.static('dist/client'));
@@ -93,6 +95,7 @@ export async function createApp(roleStore?: RoleStore) {
 
   // Wire up broadcast callback for control routes
   setBroadcastCallback(broadcastContainerStatusChange);
+  setCompositorBroadcastCallback(broadcastContainerStatusChange);
 
   return { app, server, authConfig };
 }
