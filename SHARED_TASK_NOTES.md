@@ -7,21 +7,24 @@
 **Phase 4.5 (User Management UI)**: COMPLETE
 **Phase 4.1 (Compositor Management)**: COMPLETE
 **Phase 4.2 (Stream Groups)**: COMPLETE
+**Phase 4.3 (Scheduling System)**: COMPLETE
 
 ## Completed in This Iteration
-- **Stream Groups Frontend UI**: Full CRUD and control UI for stream groups
-  - `StreamGroups` page with list view, status badges, control buttons
-  - `StreamGroupForm` component for create/edit with member selection
-  - `CreateStreamGroup` and `EditStreamGroup` page components
-  - `useStreamGroups` hook for list/single/create/update/delete
-  - `useStreamGroupControl` hook for start/stop/restart
-  - Navigation in App.tsx with capability-gated "Groups" button
-  - 10 new tests for StreamGroups page component
-  - Total tests: 606 passing (23 skipped)
+- **Scheduling System**: Full implementation of cron-based scheduling
+  - `src/server/schedules/schema.ts` - Schedule interfaces and validation
+  - `src/server/schedules/storage.ts` - CRUD operations for schedules
+  - `src/server/schedules/scheduler.ts` - Background scheduler service
+  - `src/server/routes/schedules.ts` - API endpoints
+  - `src/client/hooks/useSchedules.ts` - React Query hooks
+  - `src/client/components/ScheduleForm.tsx` - Form with cron presets
+  - `src/client/pages/Schedules.tsx` - List page with controls
+  - `src/client/pages/CreateSchedule.tsx` & `EditSchedule.tsx`
+  - Navigation in App.tsx with capability-gated "Schedules" button
+  - 57 new tests (39 backend + 18 frontend)
+  - Total tests: 663 passing (23 skipped)
 
 ## Next Steps (in priority order)
 1. **Phase 4 (Remaining optional enhancements)**:
-   - Scheduling system (Step 4.3)
    - Monitoring and alerts (Step 4.4)
    - Metrics export (Step 4.6)
    - Production hardening (Step 4.7)
@@ -32,7 +35,7 @@
 cd stream-manager
 
 # Development
-npm test           # Run all tests (606 passing)
+npm test           # Run all tests (663 passing)
 npm run typecheck  # TypeScript check
 npm run dev        # Start backend server (port 3001)
 npm run dev:client # Start Vite dev server (port 3000)
@@ -46,68 +49,52 @@ docker build -t stream-manager:latest .
 docker-compose up -d
 ```
 
-## Frontend Files Added
-- `src/client/types.ts` - Added StreamGroup, GroupMember types
-- `src/client/hooks/useStreamGroups.ts` - Hooks for groups API
-- `src/client/components/StreamGroupForm.tsx` - Form component
-- `src/client/pages/StreamGroups.tsx` - List page
-- `src/client/pages/CreateStreamGroup.tsx` - Create page
-- `src/client/pages/EditStreamGroup.tsx` - Edit page
-- `src/client/App.tsx` - Added Groups navigation and views
-
 ## API Endpoints
 
+### Schedules (NEW)
+- `GET /api/schedules` - List schedules with filters (?enabled=, &targetType=, &targetId=, &limit=, &offset=)
+- `GET /api/schedules/:id` - Get single schedule
+- `GET /api/schedules/timezones` - Get list of common timezones
+- `GET /api/schedules/status` - Get scheduler service status
+- `GET /api/schedules/by-target/:targetType/:targetId` - Get schedules for a target
+- `POST /api/schedules` - Create schedule
+- `PUT /api/schedules/:id` - Update schedule
+- `DELETE /api/schedules/:id` - Delete schedule
+- `POST /api/schedules/:id/trigger` - Manually trigger schedule
+- `POST /api/schedules/:id/enable` - Enable schedule
+- `POST /api/schedules/:id/disable` - Disable schedule
+- `POST /api/schedules/:id/duplicate` - Duplicate schedule
+- `POST /api/schedules/preview-next-run` - Preview next run time for cron expression
+
 ### Stream Groups
-- `GET /api/groups` - List groups with filters (?enabled=, &limit=, &offset=)
+- `GET /api/groups` - List groups with filters
 - `GET /api/groups/:id` - Get single group with stream statuses
-- `GET /api/groups/by-stream/:streamId` - Find groups containing a stream
 - `POST /api/groups` - Create group
 - `PUT /api/groups/:id` - Update group
 - `DELETE /api/groups/:id` - Delete group
-- `POST /api/groups/:id/start` - Start all streams in group (respects startOrder)
-- `POST /api/groups/:id/stop` - Stop all streams in group (respects stopOrder)
+- `POST /api/groups/:id/start` - Start all streams in group
+- `POST /api/groups/:id/stop` - Stop all streams in group
 - `POST /api/groups/:id/restart` - Restart all streams in group
 
 ### Compositors
-- `GET /api/compositors` - List compositors with filters
-- `GET /api/compositors/:id` - Get single compositor with container status
-- `GET /api/compositors/:id/logs` - Get compositor container logs
-- `GET /api/compositors/:id/preview` - Preview generated FFmpeg command
+- `GET /api/compositors` - List compositors
+- `GET /api/compositors/:id` - Get single compositor
 - `POST /api/compositors` - Create compositor
-- `PUT /api/compositors/:id` - Update compositor config
-- `DELETE /api/compositors/:id` - Delete compositor and remove container
-- `POST /api/compositors/:id/start` - Start compositor container
-- `POST /api/compositors/:id/stop` - Stop compositor container
-- `POST /api/compositors/:id/restart` - Restart compositor container
-- `POST /api/compositors/:id/deploy` - Redeploy compositor
-
-### Streams CRUD
-- `GET /api/streams/configs` - List configs with optional filters
-- `GET /api/streams/configs/:id` - Get single config
-- `POST /api/streams` - Create config
-- `PUT /api/streams/:id` - Update config
-- `DELETE /api/streams/:id` - Delete config and remove container
-- `POST /api/streams/:id/deploy` - Deploy config as new container
-
-### Templates
-- `GET /api/templates` - List templates with filters
-- `GET /api/templates/:id` - Get single template
-- `POST /api/templates` - Create custom template
-- `POST /api/templates/from-stream/:streamId` - Create from stream config
-- `PUT /api/templates/:id` - Update custom template
-- `DELETE /api/templates/:id` - Delete custom template
-- `POST /api/templates/:id/apply` - Apply template
+- `PUT /api/compositors/:id` - Update compositor
+- `DELETE /api/compositors/:id` - Delete compositor
+- `POST /api/compositors/:id/start|stop|restart|deploy` - Control actions
 
 ### Auth/Users
-- `GET /api/auth/me` - Get current user info and capabilities
-- `GET /api/auth/capabilities` - Get capabilities with helper booleans
-- `GET /api/auth/users` - List all users (requires `users:list`)
-- `GET /api/auth/roles` - List all roles (requires `users:list`)
-- `PUT /api/auth/users/:id/roles` - Update user roles (requires `users:manage`)
+- `GET /api/auth/me` - Get current user
+- `GET /api/auth/users` - List all users
+- `GET /api/auth/roles` - List all roles
+- `PUT /api/auth/users/:id/roles` - Update user roles
 
-## Key Decisions Made
-- **Stream Groups**: Groups hold references to stream IDs, not embedded configs
-- **Ordering**: `startOrder` can be parallel/sequential; `stopOrder` can be parallel/sequential/reverse
-- **Delays**: Default delays are 1000ms, per-member delays override group default
-- **Rate Limiting**: 5 second cooldown on group start/stop/restart actions
-- **Capabilities**: Uses existing `groups:*` capabilities from RBAC system
+## Key Technical Decisions
+- **Scheduling**: Uses cron-parser v4 for expression validation and next-run calculation
+- **Scheduler Service**: Polls every 10 seconds for due schedules
+- **Target Types**: Schedules can target streams, groups, or compositors
+- **Actions**: start, stop, refresh (refresh only for streams)
+- **Timezone Support**: Full IANA timezone support via Intl API
+- **System User**: Scheduled executions logged as "scheduler" system user
+- **Capabilities**: Uses `schedules:*` capabilities from RBAC system

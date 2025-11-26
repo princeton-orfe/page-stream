@@ -10,10 +10,11 @@ import { DEFAULT_AUTH_CONFIG } from './auth/extractors.js';
 import { AuthConfig } from './auth/types.js';
 import { createRoleStore, recordUserSeen } from './db/users.js';
 import { createWebSocketServer, closeWebSocketServer, broadcastContainerStatusChange } from './websocket.js';
-import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter, groupsRouter } from './routes/index.js';
+import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter, groupsRouter, schedulesRouter } from './routes/index.js';
 import { setBroadcastCallback } from './routes/streams.js';
 import { setBroadcastCallback as setCompositorBroadcastCallback } from './routes/compositors.js';
 import { setBroadcastCallback as setGroupsBroadcastCallback } from './routes/groups.js';
+import { setBroadcastCallback as setSchedulerBroadcastCallback, startScheduler, stopScheduler } from './schedules/scheduler.js';
 import { initializeBuiltInTemplates } from './config/templates.js';
 
 // Load config from environment
@@ -85,6 +86,7 @@ export async function createApp(roleStore?: RoleStore) {
   app.use('/api/templates', templatesRouter);
   app.use('/api/compositors', compositorsRouter);
   app.use('/api/groups', groupsRouter);
+  app.use('/api/schedules', schedulesRouter);
 
   // Static files (frontend)
   app.use(express.static('dist/client'));
@@ -99,6 +101,7 @@ export async function createApp(roleStore?: RoleStore) {
   setBroadcastCallback(broadcastContainerStatusChange);
   setCompositorBroadcastCallback(broadcastContainerStatusChange);
   setGroupsBroadcastCallback(broadcastContainerStatusChange);
+  setSchedulerBroadcastCallback(broadcastContainerStatusChange);
 
   return { app, server, authConfig };
 }
@@ -125,6 +128,9 @@ async function main() {
   // Create app and server
   const { server, authConfig } = await createApp(roleStore);
 
+  // Start scheduler
+  startScheduler();
+
   // Start server
   const port = parseInt(process.env.PORT || '3001');
   server.listen(port, () => {
@@ -135,6 +141,9 @@ async function main() {
   // Graceful shutdown handling
   const shutdown = async (signal: string) => {
     console.log(`\nReceived ${signal}, shutting down gracefully...`);
+
+    // Stop scheduler
+    stopScheduler();
 
     // Close WebSocket connections
     await closeWebSocketServer();

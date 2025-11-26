@@ -125,3 +125,27 @@ export interface CompositorConfig {
   containerStatus?: 'running' | 'stopped' | 'restarting' | 'exited';
   containerId?: string;
 }
+
+// Schedule types
+export type ScheduleTargetType = 'stream' | 'group' | 'compositor';
+export type ScheduleAction = 'start' | 'stop' | 'refresh';
+
+export interface Schedule {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  targetType: ScheduleTargetType;
+  targetId: string;
+  action: ScheduleAction;
+  cronExpression: string;
+  timezone: string;
+  lastRun?: string;
+  nextRun?: string;
+  lastRunResult?: 'success' | 'failure';
+  lastRunError?: string;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy?: string;
+}

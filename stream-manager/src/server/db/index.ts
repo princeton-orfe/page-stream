@@ -256,4 +256,34 @@ function runMigrations(db: Database.Database) {
 
     db.prepare('INSERT INTO migrations (name) VALUES (?)').run('009_stream_groups');
   }
+
+  // Migration: schedules table
+  if (!appliedNames.includes('010_schedules')) {
+    db.exec(`
+      CREATE TABLE schedules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        target_type TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        action TEXT NOT NULL,
+        cron_expression TEXT NOT NULL,
+        timezone TEXT NOT NULL DEFAULT 'UTC',
+        last_run TEXT,
+        next_run TEXT,
+        last_run_result TEXT,
+        last_run_error TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT NOT NULL,
+        updated_by TEXT
+      );
+      CREATE INDEX idx_schedules_enabled ON schedules(enabled);
+      CREATE INDEX idx_schedules_target ON schedules(target_type, target_id);
+      CREATE INDEX idx_schedules_next_run ON schedules(next_run);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('010_schedules');
+  }
 }

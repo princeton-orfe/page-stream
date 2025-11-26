@@ -13,6 +13,9 @@ import { Compositors } from './pages/Compositors';
 import { StreamGroups } from './pages/StreamGroups';
 import { CreateStreamGroup } from './pages/CreateStreamGroup';
 import { EditStreamGroup } from './pages/EditStreamGroup';
+import { Schedules } from './pages/Schedules';
+import { CreateSchedule } from './pages/CreateSchedule';
+import { EditSchedule } from './pages/EditSchedule';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAuth } from './hooks/useAuth';
 import { StreamContainer } from './types';
@@ -26,13 +29,14 @@ const queryClient = new QueryClient({
   }
 });
 
-type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users' | 'compositors' | 'stream-groups' | 'create-stream-group' | 'edit-stream-group';
+type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users' | 'compositors' | 'stream-groups' | 'create-stream-group' | 'edit-stream-group' | 'schedules' | 'create-schedule' | 'edit-schedule';
 
 function AppContent() {
   const [view, setView] = useState<View>('dashboard');
   const [selectedStream, setSelectedStream] = useState<StreamContainer | null>(null);
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
+  const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const { hasCapability } = useAuth();
 
@@ -91,6 +95,23 @@ function AppContent() {
   const handleStreamGroupDeleted = useCallback(() => {
     setSelectedGroupId(null);
     setView('stream-groups');
+  }, []);
+
+  const handleSchedulesClick = useCallback(() => {
+    setView('schedules');
+  }, []);
+
+  const handleCreateScheduleClick = useCallback(() => {
+    setView('create-schedule');
+  }, []);
+
+  const handleEditSchedule = useCallback((scheduleId: string) => {
+    setSelectedScheduleId(scheduleId);
+    setView('edit-schedule');
+  }, []);
+
+  const handleScheduleCreated = useCallback(() => {
+    setView('schedules');
   }, []);
 
   const handleCreateClick = useCallback(() => {
@@ -185,6 +206,29 @@ function AppContent() {
             onDeleted={handleStreamGroupDeleted}
           />
         ) : null;
+      case 'schedules':
+        return (
+          <Schedules
+            onBack={handleBack}
+            onEdit={handleEditSchedule}
+            onCreate={handleCreateScheduleClick}
+          />
+        );
+      case 'create-schedule':
+        return (
+          <CreateSchedule
+            onBack={() => setView('schedules')}
+            onSuccess={handleScheduleCreated}
+          />
+        );
+      case 'edit-schedule':
+        return selectedScheduleId ? (
+          <EditSchedule
+            scheduleId={selectedScheduleId}
+            onBack={() => setView('schedules')}
+            onSuccess={handleScheduleCreated}
+          />
+        ) : null;
       case 'create-stream':
         return (
           <CreateStream
@@ -259,6 +303,14 @@ function AppContent() {
               onClick={handleStreamGroupsClick}
             >
               Groups
+            </button>
+          </CapabilityGate>
+          <CapabilityGate require="schedules:list">
+            <button
+              className={`nav-button ${view === 'schedules' || view === 'create-schedule' || view === 'edit-schedule' ? 'active' : ''}`}
+              onClick={handleSchedulesClick}
+            >
+              Schedules
             </button>
           </CapabilityGate>
         </nav>
