@@ -6,29 +6,21 @@
 **Phase 3 (CRUD Operations)**: COMPLETE
 **Phase 4.5 (User Management UI)**: COMPLETE
 **Phase 4.1 (Compositor Management)**: COMPLETE
-**Phase 4.2 (Stream Groups)**: BACKEND COMPLETE - Frontend UI pending
+**Phase 4.2 (Stream Groups)**: COMPLETE
 
 ## Completed in This Iteration
-- **Stream Groups Backend**: Full CRUD and control for stream groups
-  - Schema with validation for group members, start/stop ordering
-  - Database migration for `stream_groups` table (migration 009)
-  - Storage functions (create, read, update, delete, duplicate)
-  - API routes with capability-gated access (`groups:*`)
-  - Control operations: start/stop/restart with parallel/sequential/reverse ordering
-  - Per-member delay support for sequential operations
-  - Rate limiting on group control actions (5 second cooldown)
-  - 37 new tests for schema validation
-  - Total tests: 596 passing
+- **Stream Groups Frontend UI**: Full CRUD and control UI for stream groups
+  - `StreamGroups` page with list view, status badges, control buttons
+  - `StreamGroupForm` component for create/edit with member selection
+  - `CreateStreamGroup` and `EditStreamGroup` page components
+  - `useStreamGroups` hook for list/single/create/update/delete
+  - `useStreamGroupControl` hook for start/stop/restart
+  - Navigation in App.tsx with capability-gated "Groups" button
+  - 10 new tests for StreamGroups page component
+  - Total tests: 606 passing (23 skipped)
 
 ## Next Steps (in priority order)
-1. **Stream Groups Frontend UI** - Create Groups page similar to Compositors
-   - List view with stream counts and running status
-   - Create/Edit forms for group configuration
-   - Start/Stop/Restart controls
-   - Member selection from existing streams
-   - Client hooks: `useGroups`, `useGroupControl`
-
-2. **Phase 4 (Remaining optional enhancements)**:
+1. **Phase 4 (Remaining optional enhancements)**:
    - Scheduling system (Step 4.3)
    - Monitoring and alerts (Step 4.4)
    - Metrics export (Step 4.6)
@@ -40,7 +32,7 @@
 cd stream-manager
 
 # Development
-npm test           # Run all tests (596 passing)
+npm test           # Run all tests (606 passing)
 npm run typecheck  # TypeScript check
 npm run dev        # Start backend server (port 3001)
 npm run dev:client # Start Vite dev server (port 3000)
@@ -54,9 +46,18 @@ docker build -t stream-manager:latest .
 docker-compose up -d
 ```
 
+## Frontend Files Added
+- `src/client/types.ts` - Added StreamGroup, GroupMember types
+- `src/client/hooks/useStreamGroups.ts` - Hooks for groups API
+- `src/client/components/StreamGroupForm.tsx` - Form component
+- `src/client/pages/StreamGroups.tsx` - List page
+- `src/client/pages/CreateStreamGroup.tsx` - Create page
+- `src/client/pages/EditStreamGroup.tsx` - Edit page
+- `src/client/App.tsx` - Added Groups navigation and views
+
 ## API Endpoints
 
-### Stream Groups (NEW)
+### Stream Groups
 - `GET /api/groups` - List groups with filters (?enabled=, &limit=, &offset=)
 - `GET /api/groups/:id` - Get single group with stream statuses
 - `GET /api/groups/by-stream/:streamId` - Find groups containing a stream

@@ -44,6 +44,43 @@ export interface HealthStatus {
   infobarDismissTried: boolean;
 }
 
+// Stream Group types
+export type GroupStartOrder = 'parallel' | 'sequential';
+export type GroupStopOrder = 'parallel' | 'sequential' | 'reverse';
+
+export interface GroupMember {
+  streamId: string;
+  position: number;
+  delayMs?: number;
+}
+
+export interface StreamGroup {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  members: GroupMember[];
+  startOrder: GroupStartOrder;
+  stopOrder: GroupStopOrder;
+  startDelayMs: number;
+  stopDelayMs: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy?: string;
+}
+
+export interface StreamGroupWithStatus extends StreamGroup {
+  streamStatuses: Array<{
+    streamId: string;
+    name: string;
+    containerId?: string;
+    status: 'running' | 'stopped' | 'restarting' | 'exited' | 'unknown';
+  }>;
+  runningCount: number;
+  totalCount: number;
+}
+
 // Compositor types
 export type CompositorLayout = 'side-by-side' | 'stacked' | 'grid' | 'pip' | 'custom';
 

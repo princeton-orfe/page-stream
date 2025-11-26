@@ -10,6 +10,9 @@ import { CreateStream } from './pages/CreateStream';
 import { EditStream } from './pages/EditStream';
 import { UserManagement } from './pages/UserManagement';
 import { Compositors } from './pages/Compositors';
+import { StreamGroups } from './pages/StreamGroups';
+import { CreateStreamGroup } from './pages/CreateStreamGroup';
+import { EditStreamGroup } from './pages/EditStreamGroup';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAuth } from './hooks/useAuth';
 import { StreamContainer } from './types';
@@ -23,12 +26,13 @@ const queryClient = new QueryClient({
   }
 });
 
-type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users' | 'compositors';
+type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users' | 'compositors' | 'stream-groups' | 'create-stream-group' | 'edit-stream-group';
 
 function AppContent() {
   const [view, setView] = useState<View>('dashboard');
   const [selectedStream, setSelectedStream] = useState<StreamContainer | null>(null);
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
+  const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const { hasCapability } = useAuth();
 
@@ -64,6 +68,29 @@ function AppContent() {
 
   const handleCompositorsClick = useCallback(() => {
     setView('compositors');
+  }, []);
+
+  const handleStreamGroupsClick = useCallback(() => {
+    setView('stream-groups');
+  }, []);
+
+  const handleCreateStreamGroupClick = useCallback(() => {
+    setView('create-stream-group');
+  }, []);
+
+  const handleEditStreamGroup = useCallback((groupId: string) => {
+    setSelectedGroupId(groupId);
+    setView('edit-stream-group');
+  }, []);
+
+  const handleStreamGroupCreated = useCallback((groupId: string) => {
+    setSelectedGroupId(groupId);
+    setView('edit-stream-group');
+  }, []);
+
+  const handleStreamGroupDeleted = useCallback(() => {
+    setSelectedGroupId(null);
+    setView('stream-groups');
   }, []);
 
   const handleCreateClick = useCallback(() => {
@@ -135,6 +162,29 @@ function AppContent() {
         return <UserManagement onBack={handleBack} />;
       case 'compositors':
         return <Compositors onBack={handleBack} />;
+      case 'stream-groups':
+        return (
+          <StreamGroups
+            onBack={handleBack}
+            onEdit={handleEditStreamGroup}
+            onCreate={handleCreateStreamGroupClick}
+          />
+        );
+      case 'create-stream-group':
+        return (
+          <CreateStreamGroup
+            onBack={() => setView('stream-groups')}
+            onCreated={handleStreamGroupCreated}
+          />
+        );
+      case 'edit-stream-group':
+        return selectedGroupId ? (
+          <EditStreamGroup
+            groupId={selectedGroupId}
+            onBack={() => setView('stream-groups')}
+            onDeleted={handleStreamGroupDeleted}
+          />
+        ) : null;
       case 'create-stream':
         return (
           <CreateStream
@@ -201,6 +251,14 @@ function AppContent() {
               onClick={handleCompositorsClick}
             >
               Compositors
+            </button>
+          </CapabilityGate>
+          <CapabilityGate require="groups:list">
+            <button
+              className={`nav-button ${view === 'stream-groups' || view === 'create-stream-group' || view === 'edit-stream-group' ? 'active' : ''}`}
+              onClick={handleStreamGroupsClick}
+            >
+              Groups
             </button>
           </CapabilityGate>
         </nav>
