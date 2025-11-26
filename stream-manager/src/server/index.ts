@@ -10,8 +10,9 @@ import { DEFAULT_AUTH_CONFIG } from './auth/extractors.js';
 import { AuthConfig } from './auth/types.js';
 import { createRoleStore, recordUserSeen } from './db/users.js';
 import { createWebSocketServer, closeWebSocketServer, broadcastContainerStatusChange } from './websocket.js';
-import { streamsRouter, authRouter, auditRouter } from './routes/index.js';
+import { streamsRouter, authRouter, auditRouter, templatesRouter } from './routes/index.js';
 import { setBroadcastCallback } from './routes/streams.js';
+import { initializeBuiltInTemplates } from './config/templates.js';
 
 // Load config from environment
 function loadAuthConfig(): AuthConfig {
@@ -79,6 +80,7 @@ export async function createApp(roleStore?: RoleStore) {
   app.use('/api/auth', authRouter);
   app.use('/api/streams', streamsRouter);
   app.use('/api/audit', auditRouter);
+  app.use('/api/templates', templatesRouter);
 
   // Static files (frontend)
   app.use(express.static('dist/client'));
@@ -107,6 +109,9 @@ async function main() {
   }
 
   initDatabase(dbPath);
+
+  // Initialize built-in templates
+  initializeBuiltInTemplates();
 
   // Create role store
   const roleStore = createRoleStore();

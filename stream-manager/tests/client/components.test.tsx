@@ -1101,6 +1101,13 @@ vi.mock('../../src/client/hooks/useStreamConfig', () => ({
   useDeployStream: () => mockUseDeployStream()
 }));
 
+// Mock useTemplates hook
+const mockUseTemplates = vi.fn();
+
+vi.mock('../../src/client/hooks/useTemplates', () => ({
+  useTemplates: () => mockUseTemplates()
+}));
+
 describe('CreateStream', () => {
   const mockOnBack = vi.fn();
   const mockOnCreated = vi.fn();
@@ -1114,9 +1121,27 @@ describe('CreateStream', () => {
       mutate: vi.fn(),
       isPending: false
     });
+    // Mock templates to show the template selector
+    mockUseTemplates.mockReturnValue({
+      data: {
+        templates: [
+          {
+            id: 'tmpl-1',
+            name: 'Basic Web Page',
+            description: 'Standard web page streaming',
+            category: 'standard',
+            config: { width: 1920, height: 1080 },
+            builtIn: true
+          }
+        ],
+        total: 1
+      },
+      isLoading: false,
+      error: null
+    });
   });
 
-  it('renders create stream form', () => {
+  it('renders template selector first', () => {
     render(
       <QueryWrapper>
         <CreateStream onBack={mockOnBack} onCreated={mockOnCreated} />
@@ -1124,10 +1149,11 @@ describe('CreateStream', () => {
     );
 
     expect(screen.getByText('Create New Stream')).toBeInTheDocument();
-    expect(screen.getByText('Create Stream')).toBeInTheDocument();
+    expect(screen.getByText('Choose a Template')).toBeInTheDocument();
+    expect(screen.getByText('Start from Scratch')).toBeInTheDocument();
   });
 
-  it('calls onBack when back button is clicked', () => {
+  it('calls onBack when back button is clicked from template selector', () => {
     render(
       <QueryWrapper>
         <CreateStream onBack={mockOnBack} onCreated={mockOnCreated} />
@@ -1153,6 +1179,21 @@ describe('CreateStream', () => {
     expect(screen.getByText("You don't have permission to create streams.")).toBeInTheDocument();
   });
 
+  it('shows form after clicking Start from Scratch', () => {
+    render(
+      <QueryWrapper>
+        <CreateStream onBack={mockOnBack} onCreated={mockOnCreated} />
+      </QueryWrapper>
+    );
+
+    // Click "Start from Scratch" to skip template selection
+    fireEvent.click(screen.getByText('Start from Scratch'));
+
+    // Now the form should be visible
+    expect(screen.getByLabelText('Name *')).toBeInTheDocument();
+    expect(screen.getByText('Create Stream')).toBeInTheDocument();
+  });
+
   it('calls mutate when form is submitted', () => {
     const mockMutate = vi.fn();
     mockUseCreateStream.mockReturnValue({
@@ -1166,6 +1207,9 @@ describe('CreateStream', () => {
       </QueryWrapper>
     );
 
+    // Skip template selection
+    fireEvent.click(screen.getByText('Start from Scratch'));
+
     // Fill in required fields
     fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'new-stream' } });
     fireEvent.change(screen.getByLabelText('Page URL *'), { target: { value: 'https://example.com' } });
@@ -1174,6 +1218,24 @@ describe('CreateStream', () => {
     fireEvent.click(screen.getByText('Create Stream'));
 
     expect(mockMutate).toHaveBeenCalled();
+  });
+
+  it('applies selected template when clicking Use Selected Template', () => {
+    render(
+      <QueryWrapper>
+        <CreateStream onBack={mockOnBack} onCreated={mockOnCreated} />
+      </QueryWrapper>
+    );
+
+    // Select a template
+    fireEvent.click(screen.getByText('Basic Web Page'));
+    expect(screen.getByText('Selected: Basic Web Page')).toBeInTheDocument();
+
+    // Click "Use Selected Template"
+    fireEvent.click(screen.getByText('Use Selected Template'));
+
+    // Now the form should be visible
+    expect(screen.getByLabelText('Name *')).toBeInTheDocument();
   });
 });
 

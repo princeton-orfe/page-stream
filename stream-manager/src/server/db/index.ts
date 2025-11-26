@@ -178,4 +178,25 @@ function runMigrations(db: Database.Database) {
 
     db.prepare('INSERT INTO migrations (name) VALUES (?)').run('006_display_assignments');
   }
+
+  // Migration: templates table for stream templates
+  if (!appliedNames.includes('007_templates')) {
+    db.exec(`
+      CREATE TABLE templates (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        category TEXT NOT NULL DEFAULT 'custom',
+        config TEXT NOT NULL,
+        built_in INTEGER NOT NULL DEFAULT 0,
+        created_by TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX idx_templates_category ON templates(category);
+      CREATE INDEX idx_templates_built_in ON templates(built_in);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('007_templates');
+  }
 }
