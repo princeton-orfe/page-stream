@@ -346,4 +346,30 @@ function runMigrations(db: Database.Database) {
 
     db.prepare('INSERT INTO migrations (name) VALUES (?)').run('012_alert_events');
   }
+
+  // Migration: security_events table
+  if (!appliedNames.includes('013_security_events')) {
+    db.exec(`
+      CREATE TABLE security_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        timestamp TEXT DEFAULT CURRENT_TIMESTAMP,
+        event_type TEXT NOT NULL,
+        user_id TEXT,
+        username TEXT,
+        ip_address TEXT NOT NULL,
+        user_agent TEXT,
+        request_path TEXT NOT NULL,
+        request_method TEXT NOT NULL,
+        details TEXT,
+        severity TEXT NOT NULL DEFAULT 'info'
+      );
+      CREATE INDEX idx_security_timestamp ON security_events(timestamp);
+      CREATE INDEX idx_security_event_type ON security_events(event_type);
+      CREATE INDEX idx_security_user ON security_events(user_id);
+      CREATE INDEX idx_security_ip ON security_events(ip_address);
+      CREATE INDEX idx_security_severity ON security_events(severity);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('013_security_events');
+  }
 }

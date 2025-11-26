@@ -10,8 +10,18 @@ import { BUILT_IN_ROLES } from '../../../src/server/auth/rbac.js';
 import { DEFAULT_AUTH_CONFIG, AuthConfig } from '../../../src/server/auth/extractors.js';
 
 // Mock Express request/response
-function mockRequest(headers: Record<string, string> = {}): Request {
-  return { headers } as Request;
+function mockRequest(headers: Record<string, string> = {}, options: {
+  remoteAddress?: string;
+  path?: string;
+  method?: string;
+} = {}): Request {
+  return {
+    headers,
+    socket: { remoteAddress: options.remoteAddress || '127.0.0.1' },
+    ip: options.remoteAddress || '127.0.0.1',
+    path: options.path || '/api/test',
+    method: options.method || 'GET',
+  } as unknown as Request;
 }
 
 function mockResponse(): Response {

@@ -7,3 +7,4 @@ export { default as groupsRouter } from './groups.js';
 export { default as schedulesRouter } from './schedules.js';
 export { default as alertsRouter } from './alerts.js';
 export { default as metricsRouter } from '../metrics/index.js';
+export { default as securityRouter } from './security.js';

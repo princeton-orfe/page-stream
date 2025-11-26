@@ -8,30 +8,30 @@
 **Phase 4.1 (Compositor Management)**: COMPLETE
 **Phase 4.2 (Stream Groups)**: COMPLETE
 **Phase 4.3 (Scheduling System)**: COMPLETE
-**Phase 4.4 (Monitoring and Alerts)**: COMPLETE (including tests)
+**Phase 4.4 (Monitoring and Alerts)**: COMPLETE
 **Phase 4.6 (Metrics Export)**: COMPLETE
+**Phase 4.7 (Production Hardening)**: COMPLETE
 
 ## Completed in This Iteration
-- **Prometheus Metrics Endpoint** (Step 4.6):
-  - Created `src/server/metrics/index.ts` with Prometheus format metrics
-  - Added metrics: containers (total, by status, by health), users (active count), alerts (rules, events by state), schedules (total, enabled, disabled), groups (total)
-  - Optional API key authentication via `METRICS_API_KEY` env var
-  - Bearer token or query param authentication supported
-  - 15-second cache to avoid hammering Docker
-  - Optional per-user request metrics via `METRICS_INCLUDE_USER_REQUESTS=true`
-  - Added helper functions to `db/users.ts`, `alerts/storage.ts`, `schedules/storage.ts`, `groups/storage.ts`
-  - Tests in `tests/server/metrics/metrics.test.ts`
+- **Production Hardening** (Step 4.7):
+  - Created `src/server/security/index.ts` for security event logging
+  - Created `src/server/security/trustedProxy.ts` for IP validation
+  - Created `src/server/security/rateLimit.ts` for per-user rate limiting
+  - Created `src/server/routes/security.ts` for security audit endpoints
+  - Added database migration for `security_events` table
+  - Integrated security logging into auth middleware
+  - Added trusted proxy validation before accepting auth headers
+  - Per-user rate limiting when auth mode is 'proxy'
+  - Tests: `tests/server/security/*.test.ts` (45 new tests)
 
 ## Next Steps (in priority order)
-1. **Step 4.7: Production Hardening**
-   - Validate trusted proxy IPs before accepting auth headers
-   - Log security events (failed auth, permission denied)
-   - Rate limit by user ID when auth enabled
-   - Security audit endpoint (admin only)
-2. **Step 4.8: Auth Proxy Integration Documentation**
+1. **Step 4.8: Auth Proxy Integration Documentation**
    - `docs/auth-oauth2-proxy.md`
    - `docs/auth-azure-easyauth.md`
    - `docs/auth-nginx.md`
+2. **Remaining Phase 4 deliverables**:
+   - Grafana dashboard template
+   - Comprehensive documentation
 
 ## How to Run
 ```bash
@@ -54,20 +54,34 @@ docker-compose up -d
 
 ## Key Environment Variables
 ```bash
-# Metrics (new in this iteration)
+# Security (new in this iteration)
+SECURITY_LOGGING=true             # Enable/disable security event logging (default: true)
+RATE_LIMIT_ENABLED=true           # Enable/disable per-user rate limiting (default: true)
+RATE_LIMIT_MAX_REQUESTS=120       # Max requests per window (default: 120)
+RATE_LIMIT_WINDOW_MS=60000        # Rate limit window in ms (default: 60000)
+
+# Metrics
 METRICS_ENABLED=true              # Enable/disable /metrics endpoint
 METRICS_API_KEY=                  # Optional API key for metrics endpoint
 METRICS_INCLUDE_USER_REQUESTS=    # Include per-user request counts (noisy)
 ```
 
+## New Security Endpoints
+- `GET /api/security/events` - List security events (requires `audit:read`)
+- `GET /api/security/summary` - Security dashboard summary (requires `audit:read`)
+- `GET /api/security/elevated-users` - Users with elevated privileges (requires `users:list`)
+- `GET /api/security/unusual-activity` - Unusual activity patterns (requires `audit:read`)
+- `GET /api/security/audit` - Full security audit report (requires `audit:read`, `users:list`)
+
 ## Test Files Summary
-- **Total Tests**: 890+ passing (plus new metrics tests)
-- **Metrics Tests**: `tests/server/metrics/metrics.test.ts`
-  - Label escaping, container aggregation, Prometheus formatting
-  - API key authentication (Bearer token, query param)
-  - Enable/disable functionality
+- **Total Tests**: 1000+ passing
+- **Security Tests**: `tests/server/security/*.test.ts`
+  - Trusted proxy IP validation (CIDR ranges, IPv4/IPv6)
+  - Rate limiting (per-user, per-resource, presets)
+  - Security event logging and querying
 
 ## Key Technical Decisions
-- **Metrics Cache**: 15 seconds to avoid hammering Docker API
-- **Metrics Auth**: Separate from user auth (for Prometheus scrapers)
-- **Per-User Metrics**: Opt-in due to cardinality concerns
+- **Trusted Proxy**: Validates requests come from configured proxy IPs before accepting auth headers
+- **Security Logging**: Silently fails if database not initialized (for tests)
+- **Rate Limiting**: In-memory with periodic cleanup; per-user when authenticated, per-IP for anonymous
+- **SQLite Timestamps**: Use `YYYY-MM-DD HH:MM:SS` format for compatibility

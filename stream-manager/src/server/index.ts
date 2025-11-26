@@ -10,13 +10,14 @@ import { DEFAULT_AUTH_CONFIG } from './auth/extractors.js';
 import { AuthConfig } from './auth/types.js';
 import { createRoleStore, recordUserSeen } from './db/users.js';
 import { createWebSocketServer, closeWebSocketServer, broadcastContainerStatusChange } from './websocket.js';
-import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter, groupsRouter, schedulesRouter, alertsRouter, metricsRouter } from './routes/index.js';
+import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter, groupsRouter, schedulesRouter, alertsRouter, metricsRouter, securityRouter } from './routes/index.js';
 import { setBroadcastCallback } from './routes/streams.js';
 import { setBroadcastCallback as setCompositorBroadcastCallback } from './routes/compositors.js';
 import { setBroadcastCallback as setGroupsBroadcastCallback } from './routes/groups.js';
 import { setBroadcastCallback as setSchedulerBroadcastCallback, startScheduler, stopScheduler } from './schedules/scheduler.js';
 import { startAlertEvaluator, stopAlertEvaluator } from './alerts/evaluator.js';
 import { initializeBuiltInTemplates } from './config/templates.js';
+import { createUserRateLimiter } from './security/rateLimit.js';
 
 // Load config from environment
 function loadAuthConfig(): AuthConfig {
@@ -67,6 +68,14 @@ export async function createApp(roleStore?: RoleStore) {
   // Auth middleware - runs on all routes
   app.use(createAuthMiddleware(authConfig, store));
 
+  // Per-user rate limiting (when auth is enabled)
+  const rateLimitEnabled = process.env.RATE_LIMIT_ENABLED !== 'false';
+  if (rateLimitEnabled && authConfig.mode !== 'none') {
+    const maxRequests = parseInt(process.env.RATE_LIMIT_MAX_REQUESTS || '120', 10);
+    const windowMs = parseInt(process.env.RATE_LIMIT_WINDOW_MS || '60000', 10);
+    app.use(createUserRateLimiter({ maxRequests, windowMs }));
+  }
+
   // Record user visits (for admin visibility)
   app.use((req, res, next) => {
     if (req.ctx.user.authSource === 'header') {
@@ -92,6 +101,7 @@ export async function createApp(roleStore?: RoleStore) {
   app.use('/api/groups', groupsRouter);
   app.use('/api/schedules', schedulesRouter);
   app.use('/api/alerts', alertsRouter);
+  app.use('/api/security', securityRouter);
 
   // Static files (frontend)
   app.use(express.static('dist/client'));
