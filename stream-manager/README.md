@@ -144,59 +144,43 @@ AUTH_ANONYMOUS_ROLE=  # Empty = reject anonymous
 
 ## Auth Proxy Integration
 
-### oauth2-proxy
+Stream Manager integrates with common authentication proxies. See the detailed guides:
 
+- **[OAuth2 Proxy](docs/auth-oauth2-proxy.md)** - Google, Azure AD, Keycloak, Okta, generic OIDC
+- **[Azure EasyAuth](docs/auth-azure-easyauth.md)** - Azure App Service, Azure Container Apps
+- **[nginx auth_request](docs/auth-nginx.md)** - LDAP, Vouch Proxy, custom auth services
+
+### Quick Examples
+
+**oauth2-proxy:**
 ```yaml
-# docker-compose.yml
 services:
   oauth2-proxy:
     image: quay.io/oauth2-proxy/oauth2-proxy:v7.5.1
     environment:
-      - OAUTH2_PROXY_PROVIDER=oidc
-      - OAUTH2_PROXY_OIDC_ISSUER_URL=https://your-idp.example.com
-      - OAUTH2_PROXY_CLIENT_ID=stream-manager
-      - OAUTH2_PROXY_CLIENT_SECRET=${OAUTH_CLIENT_SECRET}
-      - OAUTH2_PROXY_UPSTREAMS=http://stream-manager:3001
-      - OAUTH2_PROXY_SET_XAUTHREQUEST=true
-      - OAUTH2_PROXY_PASS_ACCESS_TOKEN=true
-    ports:
-      - "4180:4180"
+      OAUTH2_PROXY_PROVIDER: oidc
+      OAUTH2_PROXY_UPSTREAMS: http://stream-manager:3001
+      OAUTH2_PROXY_SET_XAUTHREQUEST: "true"
 
   stream-manager:
     environment:
-      - AUTH_MODE=proxy
-      - AUTH_GROUP_ROLES={"admins":["admin"]}
+      AUTH_MODE: proxy
+      AUTH_GROUP_ROLES: '{"admins":["admin"]}'
 ```
 
-### Azure EasyAuth
-
-When deployed to Azure App Service with Authentication enabled, Azure sets headers automatically:
-
-- `x-ms-client-principal-name`: User's display name
-- `x-ms-client-principal`: Base64-encoded JSON with claims
-
-Configure the manager:
+**Azure EasyAuth:**
 ```bash
 AUTH_MODE=proxy
-# Azure headers are auto-detected, no additional config needed
+# Azure headers are auto-detected
 ```
 
-### nginx auth_request
-
+**nginx auth_request:**
 ```nginx
-server {
-    location / {
-        auth_request /auth;
-        auth_request_set $user $upstream_http_x_auth_user;
-        auth_request_set $email $upstream_http_x_auth_email;
-        auth_request_set $groups $upstream_http_x_auth_groups;
-
-        proxy_set_header X-Forwarded-User $user;
-        proxy_set_header X-Forwarded-Email $email;
-        proxy_set_header X-Forwarded-Groups $groups;
-
-        proxy_pass http://stream-manager:3001;
-    }
+location / {
+    auth_request /auth;
+    auth_request_set $user $upstream_http_x_auth_user;
+    proxy_set_header X-Remote-User $user;
+    proxy_pass http://stream-manager:3001;
 }
 ```
 

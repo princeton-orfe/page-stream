@@ -11,27 +11,19 @@
 **Phase 4.4 (Monitoring and Alerts)**: COMPLETE
 **Phase 4.6 (Metrics Export)**: COMPLETE
 **Phase 4.7 (Production Hardening)**: COMPLETE
+**Phase 4.8 (Auth Proxy Docs)**: COMPLETE
 
 ## Completed in This Iteration
-- **Production Hardening** (Step 4.7):
-  - Created `src/server/security/index.ts` for security event logging
-  - Created `src/server/security/trustedProxy.ts` for IP validation
-  - Created `src/server/security/rateLimit.ts` for per-user rate limiting
-  - Created `src/server/routes/security.ts` for security audit endpoints
-  - Added database migration for `security_events` table
-  - Integrated security logging into auth middleware
-  - Added trusted proxy validation before accepting auth headers
-  - Per-user rate limiting when auth mode is 'proxy'
-  - Tests: `tests/server/security/*.test.ts` (45 new tests)
+- **Auth Proxy Integration Documentation** (Step 4.8):
+  - `docs/auth-oauth2-proxy.md` - Google, Azure AD, Keycloak, OIDC
+  - `docs/auth-azure-easyauth.md` - App Service, Container Apps
+  - `docs/auth-nginx.md` - LDAP, Vouch Proxy, custom auth
+  - Updated README.md to reference new docs
 
 ## Next Steps (in priority order)
-1. **Step 4.8: Auth Proxy Integration Documentation**
-   - `docs/auth-oauth2-proxy.md`
-   - `docs/auth-azure-easyauth.md`
-   - `docs/auth-nginx.md`
-2. **Remaining Phase 4 deliverables**:
-   - Grafana dashboard template
-   - Comprehensive documentation
+1. **Grafana Dashboard Template** - Create JSON dashboard for Prometheus metrics
+2. **E2E Tests** - Add end-to-end integration tests with Docker
+3. **Final Review** - Ensure all Phase 4 deliverables are complete
 
 ## How to Run
 ```bash
@@ -52,36 +44,8 @@ docker build -t stream-manager:latest .
 docker-compose up -d
 ```
 
-## Key Environment Variables
-```bash
-# Security (new in this iteration)
-SECURITY_LOGGING=true             # Enable/disable security event logging (default: true)
-RATE_LIMIT_ENABLED=true           # Enable/disable per-user rate limiting (default: true)
-RATE_LIMIT_MAX_REQUESTS=120       # Max requests per window (default: 120)
-RATE_LIMIT_WINDOW_MS=60000        # Rate limit window in ms (default: 60000)
-
-# Metrics
-METRICS_ENABLED=true              # Enable/disable /metrics endpoint
-METRICS_API_KEY=                  # Optional API key for metrics endpoint
-METRICS_INCLUDE_USER_REQUESTS=    # Include per-user request counts (noisy)
-```
-
-## New Security Endpoints
-- `GET /api/security/events` - List security events (requires `audit:read`)
-- `GET /api/security/summary` - Security dashboard summary (requires `audit:read`)
-- `GET /api/security/elevated-users` - Users with elevated privileges (requires `users:list`)
-- `GET /api/security/unusual-activity` - Unusual activity patterns (requires `audit:read`)
-- `GET /api/security/audit` - Full security audit report (requires `audit:read`, `users:list`)
-
-## Test Files Summary
-- **Total Tests**: 1000+ passing
-- **Security Tests**: `tests/server/security/*.test.ts`
-  - Trusted proxy IP validation (CIDR ranges, IPv4/IPv6)
-  - Rate limiting (per-user, per-resource, presets)
-  - Security event logging and querying
-
-## Key Technical Decisions
-- **Trusted Proxy**: Validates requests come from configured proxy IPs before accepting auth headers
-- **Security Logging**: Silently fails if database not initialized (for tests)
-- **Rate Limiting**: In-memory with periodic cleanup; per-user when authenticated, per-IP for anonymous
-- **SQLite Timestamps**: Use `YYYY-MM-DD HH:MM:SS` format for compatibility
+## Documentation Index
+- `README.md` - Main documentation
+- `docs/auth-oauth2-proxy.md` - OAuth2 Proxy integration
+- `docs/auth-azure-easyauth.md` - Azure EasyAuth integration
+- `docs/auth-nginx.md` - nginx auth_request integration
