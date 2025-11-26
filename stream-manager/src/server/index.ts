@@ -10,11 +10,12 @@ import { DEFAULT_AUTH_CONFIG } from './auth/extractors.js';
 import { AuthConfig } from './auth/types.js';
 import { createRoleStore, recordUserSeen } from './db/users.js';
 import { createWebSocketServer, closeWebSocketServer, broadcastContainerStatusChange } from './websocket.js';
-import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter, groupsRouter, schedulesRouter } from './routes/index.js';
+import { streamsRouter, authRouter, auditRouter, templatesRouter, compositorsRouter, groupsRouter, schedulesRouter, alertsRouter } from './routes/index.js';
 import { setBroadcastCallback } from './routes/streams.js';
 import { setBroadcastCallback as setCompositorBroadcastCallback } from './routes/compositors.js';
 import { setBroadcastCallback as setGroupsBroadcastCallback } from './routes/groups.js';
 import { setBroadcastCallback as setSchedulerBroadcastCallback, startScheduler, stopScheduler } from './schedules/scheduler.js';
+import { startAlertEvaluator, stopAlertEvaluator } from './alerts/evaluator.js';
 import { initializeBuiltInTemplates } from './config/templates.js';
 
 // Load config from environment
@@ -87,6 +88,7 @@ export async function createApp(roleStore?: RoleStore) {
   app.use('/api/compositors', compositorsRouter);
   app.use('/api/groups', groupsRouter);
   app.use('/api/schedules', schedulesRouter);
+  app.use('/api/alerts', alertsRouter);
 
   // Static files (frontend)
   app.use(express.static('dist/client'));
@@ -131,6 +133,9 @@ async function main() {
   // Start scheduler
   startScheduler();
 
+  // Start alert evaluator
+  startAlertEvaluator();
+
   // Start server
   const port = parseInt(process.env.PORT || '3001');
   server.listen(port, () => {
@@ -142,8 +147,9 @@ async function main() {
   const shutdown = async (signal: string) => {
     console.log(`\nReceived ${signal}, shutting down gracefully...`);
 
-    // Stop scheduler
+    // Stop scheduler and alert evaluator
     stopScheduler();
+    stopAlertEvaluator();
 
     // Close WebSocket connections
     await closeWebSocketServer();

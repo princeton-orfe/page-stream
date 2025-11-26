@@ -16,6 +16,9 @@ import { EditStreamGroup } from './pages/EditStreamGroup';
 import { Schedules } from './pages/Schedules';
 import { CreateSchedule } from './pages/CreateSchedule';
 import { EditSchedule } from './pages/EditSchedule';
+import { Alerts } from './pages/Alerts';
+import { CreateAlert } from './pages/CreateAlert';
+import { EditAlert } from './pages/EditAlert';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAuth } from './hooks/useAuth';
 import { StreamContainer } from './types';
@@ -29,7 +32,7 @@ const queryClient = new QueryClient({
   }
 });
 
-type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users' | 'compositors' | 'stream-groups' | 'create-stream-group' | 'edit-stream-group' | 'schedules' | 'create-schedule' | 'edit-schedule';
+type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream' | 'users' | 'compositors' | 'stream-groups' | 'create-stream-group' | 'edit-stream-group' | 'schedules' | 'create-schedule' | 'edit-schedule' | 'alerts' | 'create-alert' | 'edit-alert';
 
 function AppContent() {
   const [view, setView] = useState<View>('dashboard');
@@ -37,6 +40,7 @@ function AppContent() {
   const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [selectedGroupId, setSelectedGroupId] = useState<string | null>(null);
   const [selectedScheduleId, setSelectedScheduleId] = useState<string | null>(null);
+  const [selectedAlertRuleId, setSelectedAlertRuleId] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const { hasCapability } = useAuth();
 
@@ -112,6 +116,23 @@ function AppContent() {
 
   const handleScheduleCreated = useCallback(() => {
     setView('schedules');
+  }, []);
+
+  const handleAlertsClick = useCallback(() => {
+    setView('alerts');
+  }, []);
+
+  const handleCreateAlertClick = useCallback(() => {
+    setView('create-alert');
+  }, []);
+
+  const handleEditAlert = useCallback((alertRuleId: string) => {
+    setSelectedAlertRuleId(alertRuleId);
+    setView('edit-alert');
+  }, []);
+
+  const handleAlertCreated = useCallback(() => {
+    setView('alerts');
   }, []);
 
   const handleCreateClick = useCallback(() => {
@@ -229,6 +250,29 @@ function AppContent() {
             onSuccess={handleScheduleCreated}
           />
         ) : null;
+      case 'alerts':
+        return (
+          <Alerts
+            onBack={handleBack}
+            onEditRule={handleEditAlert}
+            onCreateRule={handleCreateAlertClick}
+          />
+        );
+      case 'create-alert':
+        return (
+          <CreateAlert
+            onBack={() => setView('alerts')}
+            onSuccess={handleAlertCreated}
+          />
+        );
+      case 'edit-alert':
+        return selectedAlertRuleId ? (
+          <EditAlert
+            alertRuleId={selectedAlertRuleId}
+            onBack={() => setView('alerts')}
+            onSuccess={handleAlertCreated}
+          />
+        ) : null;
       case 'create-stream':
         return (
           <CreateStream
@@ -311,6 +355,14 @@ function AppContent() {
               onClick={handleSchedulesClick}
             >
               Schedules
+            </button>
+          </CapabilityGate>
+          <CapabilityGate require="alerts:list">
+            <button
+              className={`nav-button ${view === 'alerts' || view === 'create-alert' || view === 'edit-alert' ? 'active' : ''}`}
+              onClick={handleAlertsClick}
+            >
+              Alerts
             </button>
           </CapabilityGate>
         </nav>

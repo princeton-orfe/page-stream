@@ -149,3 +149,77 @@ export interface Schedule {
   createdBy: string;
   updatedBy?: string;
 }
+
+// Alert types
+export type AlertTargetType = 'stream' | 'group' | 'compositor' | 'any';
+export type AlertConditionType =
+  | 'status_changed'
+  | 'status_is'
+  | 'health_unhealthy'
+  | 'restart_count'
+  | 'offline_duration'
+  | 'schedule_failed';
+export type AlertSeverity = 'info' | 'warning' | 'critical';
+export type NotificationChannelType = 'webhook' | 'email';
+
+export interface WebhookNotification {
+  type: 'webhook';
+  url: string;
+  headers?: Record<string, string>;
+  method?: 'POST' | 'PUT';
+}
+
+export interface EmailNotification {
+  type: 'email';
+  recipients: string[];
+  subject?: string;
+}
+
+export type NotificationChannel = WebhookNotification | EmailNotification;
+
+export interface AlertCondition {
+  type: AlertConditionType;
+  statusFrom?: string;
+  statusTo?: string;
+  status?: string;
+  durationSeconds?: number;
+  threshold?: number;
+  timeWindowSeconds?: number;
+}
+
+export interface AlertRule {
+  id: string;
+  name: string;
+  description?: string;
+  enabled: boolean;
+  targetType: AlertTargetType;
+  targetId?: string;
+  condition: AlertCondition;
+  severity: AlertSeverity;
+  notifications: NotificationChannel[];
+  cooldownMinutes: number;
+  lastTriggered?: string;
+  lastNotified?: string;
+  triggerCount: number;
+  createdAt: string;
+  updatedAt: string;
+  createdBy: string;
+  updatedBy?: string;
+}
+
+export interface AlertEvent {
+  id: string;
+  ruleId: string;
+  ruleName: string;
+  severity: AlertSeverity;
+  targetType: AlertTargetType;
+  targetId: string;
+  targetName: string;
+  condition: AlertCondition;
+  message: string;
+  details?: Record<string, unknown>;
+  acknowledgedAt?: string;
+  acknowledgedBy?: string;
+  resolvedAt?: string;
+  createdAt: string;
+}

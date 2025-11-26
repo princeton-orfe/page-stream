@@ -286,4 +286,64 @@ function runMigrations(db: Database.Database) {
 
     db.prepare('INSERT INTO migrations (name) VALUES (?)').run('010_schedules');
   }
+
+  // Migration: alert_rules table
+  if (!appliedNames.includes('011_alert_rules')) {
+    db.exec(`
+      CREATE TABLE alert_rules (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        target_type TEXT NOT NULL,
+        target_id TEXT,
+        condition TEXT NOT NULL,
+        severity TEXT NOT NULL DEFAULT 'warning',
+        notifications TEXT NOT NULL DEFAULT '[]',
+        cooldown_minutes INTEGER NOT NULL DEFAULT 15,
+        last_triggered TEXT,
+        last_notified TEXT,
+        trigger_count INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT NOT NULL,
+        updated_by TEXT
+      );
+      CREATE INDEX idx_alert_rules_enabled ON alert_rules(enabled);
+      CREATE INDEX idx_alert_rules_target ON alert_rules(target_type, target_id);
+      CREATE INDEX idx_alert_rules_severity ON alert_rules(severity);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('011_alert_rules');
+  }
+
+  // Migration: alert_events table
+  if (!appliedNames.includes('012_alert_events')) {
+    db.exec(`
+      CREATE TABLE alert_events (
+        id TEXT PRIMARY KEY,
+        rule_id TEXT NOT NULL,
+        rule_name TEXT NOT NULL,
+        severity TEXT NOT NULL,
+        target_type TEXT NOT NULL,
+        target_id TEXT NOT NULL,
+        target_name TEXT NOT NULL,
+        condition TEXT NOT NULL,
+        message TEXT NOT NULL,
+        details TEXT,
+        acknowledged_at TEXT,
+        acknowledged_by TEXT,
+        resolved_at TEXT,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        FOREIGN KEY (rule_id) REFERENCES alert_rules(id) ON DELETE SET NULL
+      );
+      CREATE INDEX idx_alert_events_rule ON alert_events(rule_id);
+      CREATE INDEX idx_alert_events_target ON alert_events(target_type, target_id);
+      CREATE INDEX idx_alert_events_created ON alert_events(created_at);
+      CREATE INDEX idx_alert_events_acknowledged ON alert_events(acknowledged_at);
+      CREATE INDEX idx_alert_events_resolved ON alert_events(resolved_at);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('012_alert_events');
+  }
 }
