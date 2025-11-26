@@ -3,3 +3,4 @@ export { default as authRouter } from './auth.js';
 export { default as auditRouter } from './audit.js';
 export { default as templatesRouter } from './templates.js';
 export { default as compositorsRouter } from './compositors.js';
+export { default as groupsRouter } from './groups.js';

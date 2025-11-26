@@ -6,35 +6,41 @@
 **Phase 3 (CRUD Operations)**: COMPLETE
 **Phase 4.5 (User Management UI)**: COMPLETE
 **Phase 4.1 (Compositor Management)**: COMPLETE
+**Phase 4.2 (Stream Groups)**: BACKEND COMPLETE - Frontend UI pending
 
 ## Completed in This Iteration
-- **Compositor Management**: Full CRUD and control for FFmpeg compositors
-  - Schema with 5 layout types: side-by-side, stacked, grid, pip, custom
-  - Database migration for `compositors` table
+- **Stream Groups Backend**: Full CRUD and control for stream groups
+  - Schema with validation for group members, start/stop ordering
+  - Database migration for `stream_groups` table (migration 009)
   - Storage functions (create, read, update, delete, duplicate)
-  - API routes with capability-gated access (`compositors:*`)
-  - FFmpeg filter_complex generation for each layout type
-  - Container management (create, start, stop, restart, deploy)
-  - Frontend: Compositors page with list, controls, delete confirmation
-  - Client hooks: `useCompositors`, `useCompositorControl`
-  - 27 new tests for schema validation and filter generation
-  - Total tests: 559 passing
+  - API routes with capability-gated access (`groups:*`)
+  - Control operations: start/stop/restart with parallel/sequential/reverse ordering
+  - Per-member delay support for sequential operations
+  - Rate limiting on group control actions (5 second cooldown)
+  - 37 new tests for schema validation
+  - Total tests: 596 passing
 
-## Next Steps
-**Phase 4 (Remaining optional enhancements)**:
-- Stream groups and dependencies (Step 4.2)
-- Scheduling system (Step 4.3)
-- Monitoring and alerts (Step 4.4)
-- Metrics export (Step 4.6)
-- Production hardening (Step 4.7)
-- Auth proxy integration examples (Step 4.8)
+## Next Steps (in priority order)
+1. **Stream Groups Frontend UI** - Create Groups page similar to Compositors
+   - List view with stream counts and running status
+   - Create/Edit forms for group configuration
+   - Start/Stop/Restart controls
+   - Member selection from existing streams
+   - Client hooks: `useGroups`, `useGroupControl`
+
+2. **Phase 4 (Remaining optional enhancements)**:
+   - Scheduling system (Step 4.3)
+   - Monitoring and alerts (Step 4.4)
+   - Metrics export (Step 4.6)
+   - Production hardening (Step 4.7)
+   - Auth proxy integration examples (Step 4.8)
 
 ## How to Run
 ```bash
 cd stream-manager
 
 # Development
-npm test           # Run all tests (559 passing)
+npm test           # Run all tests (596 passing)
 npm run typecheck  # TypeScript check
 npm run dev        # Start backend server (port 3001)
 npm run dev:client # Start Vite dev server (port 3000)
@@ -50,23 +56,34 @@ docker-compose up -d
 
 ## API Endpoints
 
-### Compositors (NEW)
-- `GET /api/compositors` - List compositors with filters (?enabled=, &limit=, &offset=)
+### Stream Groups (NEW)
+- `GET /api/groups` - List groups with filters (?enabled=, &limit=, &offset=)
+- `GET /api/groups/:id` - Get single group with stream statuses
+- `GET /api/groups/by-stream/:streamId` - Find groups containing a stream
+- `POST /api/groups` - Create group
+- `PUT /api/groups/:id` - Update group
+- `DELETE /api/groups/:id` - Delete group
+- `POST /api/groups/:id/start` - Start all streams in group (respects startOrder)
+- `POST /api/groups/:id/stop` - Stop all streams in group (respects stopOrder)
+- `POST /api/groups/:id/restart` - Restart all streams in group
+
+### Compositors
+- `GET /api/compositors` - List compositors with filters
 - `GET /api/compositors/:id` - Get single compositor with container status
 - `GET /api/compositors/:id/logs` - Get compositor container logs
 - `GET /api/compositors/:id/preview` - Preview generated FFmpeg command
-- `POST /api/compositors` - Create compositor (starts container if enabled=true)
+- `POST /api/compositors` - Create compositor
 - `PUT /api/compositors/:id` - Update compositor config
 - `DELETE /api/compositors/:id` - Delete compositor and remove container
 - `POST /api/compositors/:id/start` - Start compositor container
 - `POST /api/compositors/:id/stop` - Stop compositor container
 - `POST /api/compositors/:id/restart` - Restart compositor container
-- `POST /api/compositors/:id/deploy` - Redeploy compositor (recreate container)
+- `POST /api/compositors/:id/deploy` - Redeploy compositor
 
 ### Streams CRUD
 - `GET /api/streams/configs` - List configs with optional filters
 - `GET /api/streams/configs/:id` - Get single config
-- `POST /api/streams` - Create config (starts container if enabled=true)
+- `POST /api/streams` - Create config
 - `PUT /api/streams/:id` - Update config
 - `DELETE /api/streams/:id` - Delete config and remove container
 - `POST /api/streams/:id/deploy` - Deploy config as new container
@@ -88,9 +105,8 @@ docker-compose up -d
 - `PUT /api/auth/users/:id/roles` - Update user roles (requires `users:manage`)
 
 ## Key Decisions Made
-- **Compositor Image**: Uses `jrottenberg/ffmpeg:4.4-ubuntu` for FFmpeg containers
-- **Compositor Ports**: Listen ports must be in range 10001-10999
-- **Layout Types**: side-by-side, stacked, grid (2-4 inputs), pip, custom
-- **Custom Layouts**: Require explicit `customFilterComplex` FFmpeg filter string
-- **PIP Config**: Requires `pipConfig` with mainInput, pipInput, position, scale, margin
-- **Container Label**: Compositors labeled with `com.page-stream.compositor=true`
+- **Stream Groups**: Groups hold references to stream IDs, not embedded configs
+- **Ordering**: `startOrder` can be parallel/sequential; `stopOrder` can be parallel/sequential/reverse
+- **Delays**: Default delays are 1000ms, per-member delays override group default
+- **Rate Limiting**: 5 second cooldown on group start/stop/restart actions
+- **Capabilities**: Uses existing `groups:*` capabilities from RBAC system

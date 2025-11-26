@@ -231,4 +231,29 @@ function runMigrations(db: Database.Database) {
 
     db.prepare('INSERT INTO migrations (name) VALUES (?)').run('008_compositors');
   }
+
+  // Migration: stream_groups table
+  if (!appliedNames.includes('009_stream_groups')) {
+    db.exec(`
+      CREATE TABLE stream_groups (
+        id TEXT PRIMARY KEY,
+        name TEXT NOT NULL UNIQUE,
+        description TEXT,
+        enabled INTEGER NOT NULL DEFAULT 1,
+        members TEXT NOT NULL,
+        start_order TEXT NOT NULL DEFAULT 'parallel',
+        stop_order TEXT NOT NULL DEFAULT 'parallel',
+        start_delay_ms INTEGER NOT NULL DEFAULT 1000,
+        stop_delay_ms INTEGER NOT NULL DEFAULT 1000,
+        created_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        updated_at TEXT DEFAULT CURRENT_TIMESTAMP,
+        created_by TEXT NOT NULL,
+        updated_by TEXT
+      );
+      CREATE INDEX idx_stream_groups_name ON stream_groups(name);
+      CREATE INDEX idx_stream_groups_enabled ON stream_groups(enabled);
+    `);
+
+    db.prepare('INSERT INTO migrations (name) VALUES (?)').run('009_stream_groups');
+  }
 }
