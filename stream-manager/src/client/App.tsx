@@ -6,6 +6,8 @@ import { Dashboard } from './components/Dashboard';
 import { StreamDetail } from './components/StreamDetail';
 import { AuditLog } from './components/AuditLog';
 import { CapabilityGate } from './components/CapabilityGate';
+import { CreateStream } from './pages/CreateStream';
+import { EditStream } from './pages/EditStream';
 import { useWebSocket } from './hooks/useWebSocket';
 import { useAuth } from './hooks/useAuth';
 import { StreamContainer } from './types';
@@ -19,11 +21,12 @@ const queryClient = new QueryClient({
   }
 });
 
-type View = 'dashboard' | 'stream' | 'audit';
+type View = 'dashboard' | 'stream' | 'audit' | 'create-stream' | 'edit-stream';
 
 function AppContent() {
   const [view, setView] = useState<View>('dashboard');
   const [selectedStream, setSelectedStream] = useState<StreamContainer | null>(null);
+  const [selectedConfigId, setSelectedConfigId] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<string | null>(null);
   const { hasCapability } = useAuth();
 
@@ -53,6 +56,44 @@ function AppContent() {
     setView('audit');
   }, []);
 
+  const handleCreateClick = useCallback(() => {
+    setView('create-stream');
+  }, []);
+
+  const handleStreamCreated = useCallback((configId: string, containerId?: string) => {
+    if (containerId) {
+      // If container was created, go to stream detail
+      const stream = streams.find(s => s.id === containerId);
+      if (stream) {
+        setSelectedStream(stream);
+        setView('stream');
+        return;
+      }
+    }
+    // Otherwise go back to dashboard
+    setView('dashboard');
+  }, [streams]);
+
+  const handleEditStream = useCallback((configId: string) => {
+    setSelectedConfigId(configId);
+    setView('edit-stream');
+  }, []);
+
+  const handleStreamDeleted = useCallback(() => {
+    setSelectedConfigId(null);
+    setView('dashboard');
+  }, []);
+
+  const handleStreamDeployed = useCallback((containerId: string) => {
+    const stream = streams.find(s => s.id === containerId);
+    if (stream) {
+      setSelectedStream(stream);
+      setView('stream');
+    } else {
+      setView('dashboard');
+    }
+  }, [streams]);
+
   const handleSubscribe = useCallback(() => {
     if (selectedStream) {
       subscribeLogs(selectedStream.id);
@@ -80,6 +121,22 @@ function AppContent() {
         ) : null;
       case 'audit':
         return <AuditLog onBack={handleBack} />;
+      case 'create-stream':
+        return (
+          <CreateStream
+            onBack={handleBack}
+            onCreated={handleStreamCreated}
+          />
+        );
+      case 'edit-stream':
+        return selectedConfigId ? (
+          <EditStream
+            configId={selectedConfigId}
+            onBack={handleBack}
+            onDeleted={handleStreamDeleted}
+            onDeployed={handleStreamDeployed}
+          />
+        ) : null;
       default:
         return (
           <Dashboard
@@ -100,6 +157,14 @@ function AppContent() {
       <header className="header">
         <h1 onClick={() => setView('dashboard')} style={{ cursor: 'pointer' }}>Stream Manager</h1>
         <nav className="nav">
+          <CapabilityGate require="streams:create">
+            <button
+              className={`nav-button ${view === 'create-stream' ? 'active' : ''}`}
+              onClick={handleCreateClick}
+            >
+              New Stream
+            </button>
+          </CapabilityGate>
           <CapabilityGate require="audit:read">
             <button
               className={`nav-button ${view === 'audit' ? 'active' : ''}`}

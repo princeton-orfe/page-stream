@@ -3,38 +3,32 @@
 ## Current Status
 **Phase 1 (Read-Only Dashboard)**: COMPLETE
 **Phase 2 (Control Actions)**: COMPLETE
-**Phase 3 (CRUD Operations)**: IN PROGRESS (Steps 3.1-3.4 complete)
+**Phase 3 (CRUD Operations)**: IN PROGRESS (Steps 3.1-3.5 complete)
 
 ## Completed in This Iteration
-- **Step 3.4**: CRUD API routes with RBAC
-  - Added `createAndStartContainer()` to docker.ts - creates and starts Docker containers
-  - Added `removeContainer()` to docker.ts - stops and removes containers
-  - Added `getContainerByName()` to docker.ts - lookup containers by name
-  - Added CRUD routes to streams.ts:
-    - `GET /api/streams/configs` - List all stream configurations (database)
-    - `GET /api/streams/configs/:id` - Get stream config by ID
-    - `POST /api/streams` - Create new stream config (+ optionally start container)
-    - `PUT /api/streams/:id` - Update stream config
-    - `DELETE /api/streams/:id` - Delete stream config (+ remove container if running)
-    - `POST /api/streams/:id/deploy` - Deploy/redeploy a config as container
-  - All routes are capability-gated and audit-logged
-  - Tests: 436 total tests passing
+- **Step 3.5**: Frontend - Stream form with capability gates
+  - Created `StreamForm.tsx` with tabbed sections (Basic, Encoding, Behavior, Advanced)
+  - Created `CreateStream.tsx` page wrapped in CapabilityGate for `streams:create`
+  - Created `EditStream.tsx` page with capability gates for update/delete/deploy
+  - Added `useStreamConfig.ts` hook for CRUD API operations
+  - Updated `App.tsx` with new views and navigation
+  - Added "New Stream" button to navigation (gated by `streams:create`)
+  - Added CSS styles for form components
+  - Tests: 460 total tests passing (24 new tests for form components)
 
 ## Next Steps
 **Phase 3 (CRUD Operations)** - Continue with:
-1. **Step 3.5**: Frontend - Stream form with capability gates
-   - Create StreamForm.tsx with tabbed sections (Basic, Encoding, Behavior, Advanced)
-   - Create CreateStream.tsx page
-   - Create EditStream.tsx page
-   - Update navigation with "New Stream" button (gated)
-2. **Step 3.6**: Templates system
+1. **Step 3.6**: Templates system
+   - Create templates table in database
+   - Add template CRUD routes
+   - Add "Save as Template" and "Create from Template" UI
 
 ## How to Run
 ```bash
 cd stream-manager
 
 # Development
-npm test           # Run all tests (436 passing)
+npm test           # Run all tests (460 passing)
 npm run typecheck  # TypeScript check
 npm run dev        # Start backend server (port 3001)
 npm run dev:client # Start Vite dev server (port 3000)
@@ -60,6 +54,7 @@ docker-compose up -d
 - **Stream Config**: Full validation with defaults, supports import/export JSON, X11 display auto-assignment from :99-:199
 - **Container Generation**: Supports `persistDisplayAssignment` option - set to false for preview, true when creating actual containers
 - **Route Ordering**: `/configs` routes placed before `/:id` routes to prevent Express from matching "configs" as an ID parameter
+- **Form Tabs**: StreamForm uses Basic/Encoding/Behavior/Advanced tabs for organized configuration
 
 ## API Endpoints (Phase 3 CRUD)
 - `GET /api/streams/configs` - List configs with optional filters (?type=, &enabled=, &limit=, &offset=)
@@ -68,3 +63,9 @@ docker-compose up -d
 - `PUT /api/streams/:id` - Update config
 - `DELETE /api/streams/:id` - Delete config and remove container
 - `POST /api/streams/:id/deploy` - Deploy config as new container (removes existing first)
+
+## Files Added This Iteration
+- `src/client/components/StreamForm.tsx` - Tabbed form component for stream configuration
+- `src/client/pages/CreateStream.tsx` - Create stream page with capability gate
+- `src/client/pages/EditStream.tsx` - Edit stream page with update/delete/deploy controls
+- `src/client/hooks/useStreamConfig.ts` - React Query hooks for stream config CRUD

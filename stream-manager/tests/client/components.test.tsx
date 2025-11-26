@@ -1,6 +1,6 @@
 import React from 'react';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen, fireEvent } from '@testing-library/react';
+import { render, screen, fireEvent, waitFor } from '@testing-library/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '../../src/client/contexts/AuthContext';
 import { UserMenu } from '../../src/client/components/UserMenu';
@@ -11,6 +11,9 @@ import { LogViewer } from '../../src/client/components/LogViewer';
 import { Dashboard } from '../../src/client/components/Dashboard';
 import { ConfirmDialog } from '../../src/client/components/ConfirmDialog';
 import { AuditLog } from '../../src/client/components/AuditLog';
+import { StreamForm, StreamFormData, DEFAULT_FORM_DATA } from '../../src/client/components/StreamForm';
+import { CreateStream } from '../../src/client/pages/CreateStream';
+import { EditStream } from '../../src/client/pages/EditStream';
 import { StreamContainer, HealthStatus } from '../../src/client/types';
 
 // Mock fetch for auth tests
@@ -836,5 +839,600 @@ describe('AuditLog', () => {
 
     expect(screen.queryByText('Previous')).not.toBeInTheDocument();
     expect(screen.queryByText('Next')).not.toBeInTheDocument();
+  });
+});
+
+describe('StreamForm', () => {
+  const mockOnSubmit = vi.fn();
+  const mockOnCancel = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read', 'streams:create', 'streams:update'].includes(cap)
+    );
+  });
+
+  it('renders form tabs', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+    expect(screen.getByText('Basic')).toBeInTheDocument();
+    expect(screen.getByText('Encoding')).toBeInTheDocument();
+    expect(screen.getByText('Behavior')).toBeInTheDocument();
+    expect(screen.getByText('Advanced')).toBeInTheDocument();
+  });
+
+  it('renders basic tab fields by default', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+    expect(screen.getByLabelText('Name *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Type')).toBeInTheDocument();
+    expect(screen.getByLabelText('Page URL *')).toBeInTheDocument();
+    expect(screen.getByLabelText('Ingest URL *')).toBeInTheDocument();
+  });
+
+  it('switches between tabs', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    // Click on Encoding tab
+    fireEvent.click(screen.getByText('Encoding'));
+    expect(screen.getByLabelText('Width')).toBeInTheDocument();
+    expect(screen.getByLabelText('Height')).toBeInTheDocument();
+    expect(screen.getByLabelText('FPS')).toBeInTheDocument();
+
+    // Click on Behavior tab
+    fireEvent.click(screen.getByText('Behavior'));
+    expect(screen.getByLabelText('Auto Refresh (seconds)')).toBeInTheDocument();
+    expect(screen.getByLabelText('Reconnect Attempts')).toBeInTheDocument();
+
+    // Click on Advanced tab
+    fireEvent.click(screen.getByText('Advanced'));
+    expect(screen.getByLabelText('X11 Display')).toBeInTheDocument();
+    expect(screen.getByLabelText('Inject CSS Path')).toBeInTheDocument();
+  });
+
+  it('shows validation errors on submit with empty required fields', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(screen.getByText('Name is required')).toBeInTheDocument();
+    expect(screen.getByText('URL is required')).toBeInTheDocument();
+    expect(screen.getByText('Ingest URL is required')).toBeInTheDocument();
+    expect(mockOnSubmit).not.toHaveBeenCalled();
+  });
+
+  it('validates name format', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    const nameInput = screen.getByLabelText('Name *');
+    fireEvent.change(nameInput, { target: { value: '-invalid-name' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(screen.getByText(/Name must start with alphanumeric/)).toBeInTheDocument();
+  });
+
+  it('validates URL format', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    const urlInput = screen.getByLabelText('Page URL *');
+    fireEvent.change(urlInput, { target: { value: 'invalid-url' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(screen.getByText(/URL must be http/)).toBeInTheDocument();
+  });
+
+  it('validates ingest URL format', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    const ingestInput = screen.getByLabelText('Ingest URL *');
+    fireEvent.change(ingestInput, { target: { value: 'http://invalid.com' } });
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(screen.getByText(/Ingest must be srt:\/\/ or rtmp:\/\//)).toBeInTheDocument();
+  });
+
+  it('submits form with valid data', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'test-stream' } });
+    fireEvent.change(screen.getByLabelText('Page URL *'), { target: { value: 'https://example.com' } });
+    fireEvent.change(screen.getByLabelText('Ingest URL *'), { target: { value: 'srt://localhost:9000' } });
+
+    fireEvent.click(screen.getByText('Save'));
+
+    expect(mockOnSubmit).toHaveBeenCalledWith(expect.objectContaining({
+      name: 'test-stream',
+      url: 'https://example.com',
+      ingest: 'srt://localhost:9000'
+    }));
+  });
+
+  it('calls onCancel when cancel button is clicked', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    fireEvent.click(screen.getByText('Cancel'));
+    expect(mockOnCancel).toHaveBeenCalled();
+  });
+
+  it('pre-fills form with initialData', () => {
+    const initialData: Partial<StreamFormData> = {
+      name: 'existing-stream',
+      url: 'https://test.com',
+      ingest: 'rtmp://localhost/live',
+      width: 1280,
+      height: 720
+    };
+
+    render(
+      <StreamForm
+        initialData={initialData}
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+      />
+    );
+
+    expect(screen.getByLabelText('Name *')).toHaveValue('existing-stream');
+    expect(screen.getByLabelText('Page URL *')).toHaveValue('https://test.com');
+    expect(screen.getByLabelText('Ingest URL *')).toHaveValue('rtmp://localhost/live');
+
+    // Check encoding tab values
+    fireEvent.click(screen.getByText('Encoding'));
+    expect(screen.getByLabelText('Width')).toHaveValue(1280);
+    expect(screen.getByLabelText('Height')).toHaveValue(720);
+  });
+
+  it('disables form fields when readOnly is true', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+        readOnly={true}
+      />
+    );
+
+    expect(screen.getByLabelText('Name *')).toBeDisabled();
+    expect(screen.getByLabelText('Page URL *')).toBeDisabled();
+    expect(screen.getByLabelText('Ingest URL *')).toBeDisabled();
+  });
+
+  it('shows metadata when provided', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+        metadata={{
+          createdAt: '2024-01-15T10:00:00Z',
+          createdBy: 'admin',
+          updatedAt: '2024-01-16T12:00:00Z',
+          updatedBy: 'user1'
+        }}
+      />
+    );
+
+    // Go to Advanced tab where metadata is shown
+    fireEvent.click(screen.getByText('Advanced'));
+    expect(screen.getByText('Created By')).toBeInTheDocument();
+    expect(screen.getByText('admin')).toBeInTheDocument();
+    expect(screen.getByText('Updated By')).toBeInTheDocument();
+    expect(screen.getByText('user1')).toBeInTheDocument();
+  });
+
+  it('uses custom submit label', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+        submitLabel="Create Stream"
+      />
+    );
+
+    expect(screen.getByText('Create Stream')).toBeInTheDocument();
+  });
+
+  it('shows saving state when isSubmitting is true', () => {
+    render(
+      <StreamForm
+        onSubmit={mockOnSubmit}
+        onCancel={mockOnCancel}
+        isSubmitting={true}
+      />
+    );
+
+    expect(screen.getByText('Saving...')).toBeInTheDocument();
+  });
+});
+
+// Mock useStreamConfig hooks
+const mockUseStreamConfig = vi.fn();
+const mockUseCreateStream = vi.fn();
+const mockUseUpdateStream = vi.fn();
+const mockUseDeleteStream = vi.fn();
+const mockUseDeployStream = vi.fn();
+
+vi.mock('../../src/client/hooks/useStreamConfig', () => ({
+  useStreamConfig: () => mockUseStreamConfig(),
+  useCreateStream: () => mockUseCreateStream(),
+  useUpdateStream: () => mockUseUpdateStream(),
+  useDeleteStream: () => mockUseDeleteStream(),
+  useDeployStream: () => mockUseDeployStream()
+}));
+
+describe('CreateStream', () => {
+  const mockOnBack = vi.fn();
+  const mockOnCreated = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read', 'streams:create', 'streams:update'].includes(cap)
+    );
+    mockUseCreateStream.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false
+    });
+  });
+
+  it('renders create stream form', () => {
+    render(
+      <QueryWrapper>
+        <CreateStream onBack={mockOnBack} onCreated={mockOnCreated} />
+      </QueryWrapper>
+    );
+
+    expect(screen.getByText('Create New Stream')).toBeInTheDocument();
+    expect(screen.getByText('Create Stream')).toBeInTheDocument();
+  });
+
+  it('calls onBack when back button is clicked', () => {
+    render(
+      <QueryWrapper>
+        <CreateStream onBack={mockOnBack} onCreated={mockOnCreated} />
+      </QueryWrapper>
+    );
+
+    fireEvent.click(screen.getByText('Back'));
+    expect(mockOnBack).toHaveBeenCalled();
+  });
+
+  it('shows access denied when user lacks streams:create capability', () => {
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read'].includes(cap)
+    );
+
+    render(
+      <QueryWrapper>
+        <CreateStream onBack={mockOnBack} onCreated={mockOnCreated} />
+      </QueryWrapper>
+    );
+
+    expect(screen.getByText('Access Denied')).toBeInTheDocument();
+    expect(screen.getByText("You don't have permission to create streams.")).toBeInTheDocument();
+  });
+
+  it('calls mutate when form is submitted', () => {
+    const mockMutate = vi.fn();
+    mockUseCreateStream.mockReturnValue({
+      mutate: mockMutate,
+      isPending: false
+    });
+
+    render(
+      <QueryWrapper>
+        <CreateStream onBack={mockOnBack} onCreated={mockOnCreated} />
+      </QueryWrapper>
+    );
+
+    // Fill in required fields
+    fireEvent.change(screen.getByLabelText('Name *'), { target: { value: 'new-stream' } });
+    fireEvent.change(screen.getByLabelText('Page URL *'), { target: { value: 'https://example.com' } });
+    fireEvent.change(screen.getByLabelText('Ingest URL *'), { target: { value: 'srt://localhost:9000' } });
+
+    fireEvent.click(screen.getByText('Create Stream'));
+
+    expect(mockMutate).toHaveBeenCalled();
+  });
+});
+
+describe('EditStream', () => {
+  const mockOnBack = vi.fn();
+  const mockOnDeleted = vi.fn();
+  const mockOnDeployed = vi.fn();
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockAuthContext.hasCapability.mockImplementation(
+      (cap: string) => ['streams:list', 'streams:read', 'streams:create', 'streams:update', 'streams:delete', 'streams:start'].includes(cap)
+    );
+    mockUseUpdateStream.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false,
+      isSuccess: false
+    });
+    mockUseDeleteStream.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false
+    });
+    mockUseDeployStream.mockReturnValue({
+      mutate: vi.fn(),
+      isPending: false
+    });
+  });
+
+  it('renders loading state', () => {
+    mockUseStreamConfig.mockReturnValue({
+      data: undefined,
+      isLoading: true,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    expect(screen.getByText('Loading stream configuration...')).toBeInTheDocument();
+  });
+
+  it('renders error state when config not found', () => {
+    mockUseStreamConfig.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      error: new Error('Not found')
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    expect(screen.getByText('Error')).toBeInTheDocument();
+    expect(screen.getByText('Not found')).toBeInTheDocument();
+  });
+
+  it('renders edit form with config data', () => {
+    mockUseStreamConfig.mockReturnValue({
+      data: {
+        config: {
+          id: 'config-123',
+          name: 'test-stream',
+          type: 'standard',
+          enabled: true,
+          url: 'https://example.com',
+          ingest: 'srt://localhost:9000',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          cropInfobar: 0,
+          preset: 'veryfast',
+          videoBitrate: '2500k',
+          audioBitrate: '128k',
+          format: 'mpegts',
+          autoRefreshSeconds: 0,
+          reconnectAttempts: 0,
+          reconnectInitialDelayMs: 1000,
+          reconnectMaxDelayMs: 30000,
+          healthIntervalSeconds: 30,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-16T12:00:00Z',
+          createdBy: 'admin'
+        }
+      },
+      isLoading: false,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    expect(screen.getByText('Edit Stream: test-stream')).toBeInTheDocument();
+    expect(screen.getByLabelText('Name *')).toHaveValue('test-stream');
+    expect(screen.getByLabelText('Page URL *')).toHaveValue('https://example.com');
+  });
+
+  it('shows delete button when user has streams:delete capability', () => {
+    mockUseStreamConfig.mockReturnValue({
+      data: {
+        config: {
+          id: 'config-123',
+          name: 'test-stream',
+          type: 'standard',
+          enabled: true,
+          url: 'https://example.com',
+          ingest: 'srt://localhost:9000',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          cropInfobar: 0,
+          preset: 'veryfast',
+          videoBitrate: '2500k',
+          audioBitrate: '128k',
+          format: 'mpegts',
+          autoRefreshSeconds: 0,
+          reconnectAttempts: 0,
+          reconnectInitialDelayMs: 1000,
+          reconnectMaxDelayMs: 30000,
+          healthIntervalSeconds: 30,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-16T12:00:00Z',
+          createdBy: 'admin'
+        }
+      },
+      isLoading: false,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    expect(screen.getByText('Delete')).toBeInTheDocument();
+  });
+
+  it('shows deploy button when user has streams:start capability', () => {
+    mockUseStreamConfig.mockReturnValue({
+      data: {
+        config: {
+          id: 'config-123',
+          name: 'test-stream',
+          type: 'standard',
+          enabled: true,
+          url: 'https://example.com',
+          ingest: 'srt://localhost:9000',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          cropInfobar: 0,
+          preset: 'veryfast',
+          videoBitrate: '2500k',
+          audioBitrate: '128k',
+          format: 'mpegts',
+          autoRefreshSeconds: 0,
+          reconnectAttempts: 0,
+          reconnectInitialDelayMs: 1000,
+          reconnectMaxDelayMs: 30000,
+          healthIntervalSeconds: 30,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-16T12:00:00Z',
+          createdBy: 'admin'
+        }
+      },
+      isLoading: false,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    expect(screen.getByText('Deploy')).toBeInTheDocument();
+  });
+
+  it('shows delete confirmation dialog when delete is clicked', () => {
+    mockUseStreamConfig.mockReturnValue({
+      data: {
+        config: {
+          id: 'config-123',
+          name: 'test-stream',
+          type: 'standard',
+          enabled: true,
+          url: 'https://example.com',
+          ingest: 'srt://localhost:9000',
+          width: 1920,
+          height: 1080,
+          fps: 30,
+          cropInfobar: 0,
+          preset: 'veryfast',
+          videoBitrate: '2500k',
+          audioBitrate: '128k',
+          format: 'mpegts',
+          autoRefreshSeconds: 0,
+          reconnectAttempts: 0,
+          reconnectInitialDelayMs: 1000,
+          reconnectMaxDelayMs: 30000,
+          healthIntervalSeconds: 30,
+          createdAt: '2024-01-15T10:00:00Z',
+          updatedAt: '2024-01-16T12:00:00Z',
+          createdBy: 'admin'
+        }
+      },
+      isLoading: false,
+      error: null
+    });
+
+    render(
+      <QueryWrapper>
+        <EditStream
+          configId="config-123"
+          onBack={mockOnBack}
+          onDeleted={mockOnDeleted}
+          onDeployed={mockOnDeployed}
+        />
+      </QueryWrapper>
+    );
+
+    // Click delete button
+    fireEvent.click(screen.getByText('Delete'));
+
+    // Check dialog appears
+    expect(screen.getByText('Delete Stream')).toBeInTheDocument();
+    expect(screen.getByText(/Are you sure you want to delete/)).toBeInTheDocument();
   });
 });
