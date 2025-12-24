@@ -48,6 +48,7 @@ function createVideoStreamer(opts: { videoFile: string; videoLoop?: boolean; wid
     suppressAutomationBanner: true,
     autoDismissInfobar: false,
     cropInfobar: 0,
+    overscan: 0,
     videoFile: opts.videoFile,
     videoLoop: opts.videoLoop ?? false,
   });

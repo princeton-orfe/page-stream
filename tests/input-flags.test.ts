@@ -27,6 +27,7 @@ test('buildFfmpegArgs includes INPUT_FFMPEG_FLAGS at input position', () => {
     suppressAutomationBanner: true,
     autoDismissInfobar: false,
     cropInfobar: 0,
+    overscan: 0,
     videoLoop: false,
   });
   const args = streamer.buildFfmpegArgs();

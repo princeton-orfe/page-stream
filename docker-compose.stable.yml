@@ -88,6 +88,9 @@ services:
       - ./scripts:/out/scripts:ro
     environment:
       - COMPOSITOR_INGEST=${COMPOSITOR_INGEST:-srt://srt-ingest:9000?streamid=composite}
+      # Overscan compensation for compositor output (0-50, percentage inset on all sides)
+      # Example: COMPOSITOR_OVERSCAN=3 scales content to 94% and centers with black border
+      - COMPOSITOR_OVERSCAN=${COMPOSITOR_OVERSCAN:-0}
     command: "/out/scripts/compositor.sh"
     healthcheck:
       test: ["CMD-SHELL", "pgrep ffmpeg"]
@@ -130,6 +133,7 @@ services:
         condition: service_healthy
     # Use SOURCE_LEFT_URL from .env.stable (falls back to demo page if unset)
     # Command: ingest URL and refresh interval (input tuning comes from INPUT_FFMPEG_FLAGS env)
+    # Note: Source-level --overscan applies BEFORE compositing; use COMPOSITOR_OVERSCAN for final output
     command:
       - "--ingest"
       - "srt://compositor:10001?streamid=left&latency=10000"
@@ -139,6 +143,8 @@ services:
       - "${DEFAULT_REFRESH_INTERVAL:-3600}"
       - "--crop-infobar"
       - "64"
+      - "--overscan"
+      - "${SOURCE_LEFT_OVERSCAN:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep Xvfb && pgrep chrome && pgrep ffmpeg"]
       interval: 10s
@@ -174,6 +180,7 @@ services:
         condition: service_healthy
     # Use SOURCE_RIGHT_URL from .env.stable (falls back to demo page if unset)
     # Command: ingest URL and refresh interval (input tuning comes from INPUT_FFMPEG_FLAGS env)
+    # Note: Source-level --overscan applies BEFORE compositing; use COMPOSITOR_OVERSCAN for final output
     command:
       - "--ingest"
       - "srt://compositor:10002?streamid=right&latency=10000"
@@ -183,6 +190,8 @@ services:
       - "${DEFAULT_REFRESH_INTERVAL:-3600}"
       - "--crop-infobar"
       - "64"
+      - "--overscan"
+      - "${SOURCE_RIGHT_OVERSCAN:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep Xvfb && pgrep chrome && pgrep ffmpeg"]
       interval: 10s
@@ -219,6 +228,8 @@ services:
       - "30"
       - "--video-bitrate"
       - "5000k"
+      - "--overscan"
+      - "${STANDARD_1_OVERSCAN:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep ffmpeg"]
       interval: 10s
@@ -290,6 +301,8 @@ services:
       - "${DEFAULT_REFRESH_INTERVAL:-3600}"
       - "--crop-infobar"
       - "64"
+      - "--overscan"
+      - "${STANDARD_2_OVERSCAN:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep Xvfb && pgrep chrome && pgrep ffmpeg"]
       interval: 10s
@@ -325,6 +338,8 @@ services:
       - "${DEFAULT_REFRESH_INTERVAL:-3600}"
       - "--crop-infobar"
       - "64"
+      - "--overscan"
+      - "${STANDARD_3_OVERSCAN:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep Xvfb && pgrep chrome && pgrep ffmpeg"]
       interval: 10s
@@ -366,6 +381,8 @@ services:
       - "${DEFAULT_REFRESH_INTERVAL:-3600}"
       - "--crop-infobar"
       - "64"
+      - "--overscan"
+      - "${STANDARD_4_OVERSCAN:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep Xvfb && pgrep chrome && pgrep ffmpeg"]
       interval: 10s
@@ -417,6 +434,8 @@ services:
       - "30"
       - "--video-bitrate"
       - "5000k"
+      - "--overscan"
+      - "${VIDEO_LOOP_OVERSCAN:-0}"
     healthcheck:
       test: ["CMD-SHELL", "pgrep ffmpeg"]
       interval: 10s

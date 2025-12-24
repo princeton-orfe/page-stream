@@ -31,6 +31,7 @@ interface StreamOptions {
   suppressAutomationBanner: boolean; // hide "controlled by automated test software" message
   autoDismissInfobar: boolean; // attempt to close top automation infobar via xdotool (best effort)
   cropInfobar: number; // if >0, crop this many pixels from top of capture to hide infobar
+  overscan: number; // if >0, scale down content by this percentage and center within full resolution
   injectCss?: string; // path to CSS file to inject into the page
   injectJs?: string; // path to JS file to inject into the page
   videoFile?: string; // path to video file for direct streaming (bypasses browser)
@@ -272,22 +273,38 @@ export class PageStreamer {
     if (audioBitrate) {
       args.push('-c:a','aac','-b:a', audioBitrate);
     }
-    // Inject crop filter if requested (before user-supplied extra args so they can still override with -filter_complex later)
+    // Build video filter chain (crop, overscan, etc.)
+    const videoFilters: string[] = [];
+
+    // Crop filter if requested
     if (this.opts.cropInfobar && this.opts.cropInfobar > 0) {
       const cropH = this.opts.cropInfobar;
       const newHeight = this.opts.height - cropH;
       if (newHeight > 0) {
-        // Prepend / merge with existing -vf if present in extra args would be complex; simpler: add -vf here if user didn't already.
-        // If user also supplies -vf later ffmpeg will use the last occurrence, so we only add if not present in extraFfmpeg.
-        const hasUserVf = extraFfmpeg.some(a => a === '-vf' || a === '-filter:v' || a === '-filter_complex');
-        if (!hasUserVf) {
-          args.push('-vf', `crop=${width}:${newHeight}:0:${cropH}`);
-        } else {
-          // If user has its own -vf we can attempt to chain via filter_complex but that's riskier; log advisory.
-          console.warn('[crop-infobar] User-provided video filters detected; automatic crop not injected. Add crop manually if needed (crop=w:h:0:TOP).');
-        }
+        videoFilters.push(`crop=${width}:${newHeight}:0:${cropH}`);
       } else {
         console.warn(`[crop-infobar] Requested crop (${cropH}px) >= height (${this.opts.height}px); ignoring.`);
+      }
+    }
+
+    // Overscan filter if requested: scale down content and pad to original resolution
+    if (this.opts.overscan && this.opts.overscan > 0) {
+      const overscanPct = Math.min(this.opts.overscan, 50); // Cap at 50%
+      const scaleFactor = (100 - 2 * overscanPct) / 100;
+      const scaledW = Math.round(width * scaleFactor);
+      const scaledH = Math.round(height * scaleFactor);
+      // Scale down, then pad back to original size (centered)
+      videoFilters.push(`scale=${scaledW}:${scaledH}`);
+      videoFilters.push(`pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`);
+    }
+
+    // Inject filters if any (before user-supplied extra args so they can still override with -filter_complex later)
+    if (videoFilters.length > 0) {
+      const hasUserVf = extraFfmpeg.some(a => a === '-vf' || a === '-filter:v' || a === '-filter_complex');
+      if (!hasUserVf) {
+        args.push('-vf', videoFilters.join(','));
+      } else {
+        console.warn('[video-filters] User-provided video filters detected; automatic filters not injected. Add manually if needed.');
       }
     }
     // Extra user-supplied args before container/output format
@@ -327,6 +344,18 @@ export class PageStreamer {
     videoFilters.push(`scale=${width}:${height}:force_original_aspect_ratio=decrease`);
     // Pad to exact target size (center the video if aspect ratio differs)
     videoFilters.push(`pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`);
+
+    // Overscan filter if requested: scale down content and pad to original resolution
+    if (this.opts.overscan && this.opts.overscan > 0) {
+      const overscanPct = Math.min(this.opts.overscan, 50); // Cap at 50%
+      const scaleFactor = (100 - 2 * overscanPct) / 100;
+      const scaledW = Math.round(width * scaleFactor);
+      const scaledH = Math.round(height * scaleFactor);
+      // Scale down, then pad back to original size (centered)
+      videoFilters.push(`scale=${scaledW}:${scaledH}`);
+      videoFilters.push(`pad=${width}:${height}:(ow-iw)/2:(oh-ih)/2`);
+    }
+
     // Ensure consistent frame rate
     videoFilters.push(`fps=${fps}`);
 
@@ -656,6 +685,7 @@ async function main() {
   .option('--no-suppress-automation-banner', 'Do not hide Chromium automation banner')
   .option('--auto-dismiss-infobar', 'Attempt to auto-dismiss Chromium automation infobar using xdotool (best effort)', false)
   .option('--crop-infobar <px>', 'Crop this many pixels from the top of the captured video (removes persistent infobar rather than clicking it)', (v: string)=>parseInt(v,10), 0)
+  .option('--overscan <percent>', 'Scale down content by percentage (0-50) and center within full resolution to compensate for display overscan', (v: string)=>parseInt(v,10), 0)
   .option('--inject-css <file>', 'Inject CSS from file into the page')
   .option('--inject-js <file>', 'Inject JavaScript from file into the page')
     .option('--refresh-signal <sig>', 'POSIX signal to trigger page refresh', 'SIGHUP')
@@ -709,6 +739,7 @@ async function main() {
     suppressAutomationBanner: opts.suppressAutomationBanner !== false,
     autoDismissInfobar: !!opts.autoDismissInfobar,
     cropInfobar: parseInt(opts.cropInfobar,10) || 0,
+    overscan: parseInt(opts.overscan,10) || 0,
     injectCss: opts.injectCss,
     injectJs: opts.injectJs,
     videoFile: opts.videoFile,
