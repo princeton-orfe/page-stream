@@ -11,7 +11,7 @@
     "test": "node --test --loader ts-node/esm tests/*.test.ts"
   },
   "dependencies": {
-    "commander": "^11.1.0",
+    "commander": "^14.0.3",
   "playwright": "1.55.1"
   },
   "devDependencies": {
